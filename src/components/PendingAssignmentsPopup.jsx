@@ -13,8 +13,22 @@ const PendingAssignmentsPopup = ({ isOpen, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedJoiners, setSelectedJoiners] = useState([]);
+
+  // Helpers to ensure uniqueness and stable keys
+  const getJoinerId = (j) => j?.author_id || j?._id || j?.employee_id || j?.candidate_personal_mail_id || j?.email || '';
+  const dedupeById = (list) => {
+    const map = new Map();
+    (list || []).forEach((j) => {
+      const k = getJoinerId(j) || JSON.stringify(j);
+      if (!map.has(k)) map.set(k, j);
+    });
+    return Array.from(map.values());
+  };
   const [showBulkWorkflow, setShowBulkWorkflow] = useState(false);
   const [currentStep, setCurrentStep] = useState('select'); // 'select', 'details', 'assign'
+  const [showNotJoinedModal, setShowNotJoinedModal] = useState(false);
+  const [notJoinedReason, setNotJoinedReason] = useState('');
+  const [selectedJoinerForNotJoined, setSelectedJoinerForNotJoined] = useState(null);
 
   // Step 1: Fetch pending joiners
   useEffect(() => {
@@ -30,8 +44,8 @@ const PendingAssignmentsPopup = ({ isOpen, onClose, onSuccess }) => {
       const allJoiners = response.data.joiners || [];
       
       // Filter out joiners who already have user accounts
-      const pendingJoiners = allJoiners.filter(joiner => !joiner.accountCreated);
-      setPendingJoiners(pendingJoiners);
+      const pending = allJoiners.filter(joiner => !joiner.accountCreated);
+      setPendingJoiners(dedupeById(pending));
     } catch (error) {
       console.error('Error fetching pending joiners:', error);
       toast.error('Failed to fetch pending joiners');
@@ -67,11 +81,10 @@ const PendingAssignmentsPopup = ({ isOpen, onClose, onSuccess }) => {
 
   const handleBulkJoinerSelect = (joiner) => {
     setSelectedJoiners(prev => {
-      if (prev.some(j => j.author_id === joiner.author_id)) {
-        return prev.filter(j => j.author_id !== joiner.author_id);
-      } else {
-        return [...prev, joiner];
-      }
+      const exists = prev.some(j => getJoinerId(j) === getJoinerId(joiner));
+      return exists
+        ? prev.filter(j => getJoinerId(j) !== getJoinerId(joiner))
+        : dedupeById([...prev, joiner]);
     });
   };
 
@@ -79,7 +92,7 @@ const PendingAssignmentsPopup = ({ isOpen, onClose, onSuccess }) => {
     if (selectedJoiners.length === filteredJoiners.length) {
       setSelectedJoiners([]);
     } else {
-      setSelectedJoiners([...filteredJoiners]);
+      setSelectedJoiners(dedupeById([...filteredJoiners]));
     }
   };
 
@@ -110,6 +123,44 @@ const PendingAssignmentsPopup = ({ isOpen, onClose, onSuccess }) => {
     setSelectedJoiner(null);
   };
 
+  const handleMarkAsNotJoined = (joiner) => {
+    setSelectedJoinerForNotJoined(joiner);
+    setNotJoinedReason('');
+    setShowNotJoinedModal(true);
+  };
+
+  const handleSubmitNotJoined = async () => {
+    if (!notJoinedReason.trim()) {
+      toast.error('Please provide a reason for not joining');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      // Update joiner status to not_joined with reason
+      const url = `${API_PATHS.JOINERS.UPDATE(selectedJoinerForNotJoined.author_id)}`;
+      const response = await axiosInstance.put(url, {
+        status: 'not_joined',
+        notJoinedReason: notJoinedReason.trim(),
+        updatedAt: new Date().toISOString()
+      });
+      
+      toast.success('Joiner marked as not joined successfully');
+      setShowNotJoinedModal(false);
+      setSelectedJoinerForNotJoined(null);
+      setNotJoinedReason('');
+      fetchPendingJoiners(); // Refresh the list
+      onSuccess(); // Notify parent component
+    } catch (error) {
+      console.error('=== FRONTEND UPDATE JOINER ERROR ===');
+      console.error('Error updating joiner status:', error);
+      console.error('Error response:', error.response);
+      console.error('Error message:', error.message);
+      toast.error('Failed to update joiner status');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Debug logging
 
@@ -117,7 +168,7 @@ const PendingAssignmentsPopup = ({ isOpen, onClose, onSuccess }) => {
 
   return (
     <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-      <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl overflow-hidden flex flex-col">
+      <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gray-50 flex-shrink-0">
           <div>
@@ -158,7 +209,7 @@ const PendingAssignmentsPopup = ({ isOpen, onClose, onSuccess }) => {
                       type="checkbox"
                       checked={selectedJoiners.length === filteredJoiners.length && filteredJoiners.length > 0}
                       onChange={handleSelectAll}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
                     />
                     <span className="text-sm font-medium text-gray-700">
                       Select All ({selectedJoiners.length}/{filteredJoiners.length})
@@ -167,7 +218,7 @@ const PendingAssignmentsPopup = ({ isOpen, onClose, onSuccess }) => {
                   {selectedJoiners.length > 0 && (
                     <button
                       onClick={handleBulkActivate}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                      className="cursor-pointer px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                     >
                       Activate Selected ({selectedJoiners.length})
                     </button>
@@ -181,37 +232,53 @@ const PendingAssignmentsPopup = ({ isOpen, onClose, onSuccess }) => {
                   </div>
                 ) : filteredJoiners.length > 0 ? (
                   <div className="space-y-3">
-                    {filteredJoiners.map((joiner) => (
+                    {dedupeById(filteredJoiners).map((joiner, idx) => (
                       <div
-                        key={joiner.author_id}
+                        key={`${getJoinerId(joiner)}-${idx}`}
                         className={`flex items-center justify-between p-4 rounded-lg border-2 transition-colors ${
                           selectedJoiners.some(j => j.author_id === joiner.author_id)
                             ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
                         }`}
                       >
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-3 flex-1">
                           <input
                             type="checkbox"
                             checked={selectedJoiners.some(j => j.author_id === joiner.author_id)}
                             onChange={() => handleBulkJoinerSelect(joiner)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
                           />
-                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
                             <LuUser className="w-5 h-5 text-blue-600" />
                           </div>
-                          <div>
-                            <h3 className="font-medium text-gray-900">{joiner.name || joiner.candidate_name}</h3>
-                            <p className="text-sm text-gray-500">{joiner.email || joiner.candidate_personal_mail_id}</p>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-gray-900 truncate">{joiner.name || joiner.candidate_name}</h3>
+                            <p className="text-sm text-gray-500 truncate">{joiner.email || joiner.candidate_personal_mail_id}</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
-                            {joiner.status}
-                          </span>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {moment(joiner.joiningDate || joiner.date_of_joining).format('MMM D, YYYY')}
-                          </p>
+                        <div className="flex items-center space-x-4 ml-4">
+                          <div className="text-right">
+                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+                              {joiner.status}
+                            </span>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {moment(joiner.joiningDate || joiner.date_of_joining).format('MMM D, YYYY')}
+                            </p>
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleJoinerSelect(joiner)}
+                              className="cursor-pointer px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors font-medium"
+                            >
+                              Activate
+                            </button>
+                            <button
+                              onClick={() => handleMarkAsNotJoined(joiner)}
+                              className="cursor-pointer px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors font-medium"
+                            >
+                              Not Joined
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -336,6 +403,64 @@ const PendingAssignmentsPopup = ({ isOpen, onClose, onSuccess }) => {
         joiners={[]}
         onSuccess={handleWorkflowSuccess}
       />
+
+      {/* Not Joined Reason Modal */}
+      {showNotJoinedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Mark as Not Joined</h3>
+                <button
+                  onClick={() => setShowNotJoinedModal(false)}
+                  className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  <LuX className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-2">
+                  <strong>{selectedJoinerForNotJoined?.name || selectedJoinerForNotJoined?.candidate_name}</strong> 
+                  <br />
+                  <span className="text-gray-500">{selectedJoinerForNotJoined?.email || selectedJoinerForNotJoined?.candidate_personal_mail_id}</span>
+                </p>
+                <p className="text-sm text-gray-700 mb-3">Please provide a reason why this candidate did not join:</p>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Reason for not joining *
+                </label>
+                <textarea
+                  value={notJoinedReason}
+                  onChange={(e) => setNotJoinedReason(e.target.value)}
+                  placeholder="e.g., Declined offer, Found another job, Personal reasons, etc."
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                  rows={4}
+                  required
+                />
+              </div>
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleSubmitNotJoined}
+                  disabled={loading || !notJoinedReason.trim()}
+                  className="cursor-pointer flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Updating...' : 'Mark as Not Joined'}
+                </button>
+                <button
+                  onClick={() => setShowNotJoinedModal(false)}
+                  className="cursor-pointer px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

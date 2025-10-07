@@ -15,4 +15,6 @@ export const useUserAuth = () => {
       navigate("/login");
     }
   }, [user, loading, clearUser, navigate]);
+
+  return { user, loading, clearUser };
 };

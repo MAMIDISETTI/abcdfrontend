@@ -15,7 +15,8 @@ import {
   LuFilter,
   LuPlus,
   LuPencil,
-  LuTrash2
+  LuTrash2,
+  LuLoader
 } from 'react-icons/lu';
 
 const CampusAllocation = () => {
@@ -32,6 +33,7 @@ const CampusAllocation = () => {
   const [showAllocationModal, setShowAllocationModal] = useState(false);
   const [showCampusModal, setShowCampusModal] = useState(false);
   const [newCampus, setNewCampus] = useState({ name: '', location: '', capacity: '' });
+  const [isAllocating, setIsAllocating] = useState(false);
 
   useEffect(() => {
     fetchTrainees();
@@ -58,10 +60,14 @@ const CampusAllocation = () => {
             });
             
             // Add allocatedCampus field to each trainee
-            const traineesWithAllocation = trainees.map(trainee => ({
-              ...trainee,
-              allocatedCampus: allocationMap[trainee._id || trainee.id] || null
-            }));
+            const traineesWithAllocation = trainees.map(trainee => {
+              const keyCandidates = [trainee._id, trainee.id, trainee.author_id];
+              const matchedKey = keyCandidates.find(k => k && allocationMap[k]);
+              return {
+                ...trainee,
+                allocatedCampus: matchedKey ? allocationMap[matchedKey] : null
+              };
+            });
             
             setTrainees(traineesWithAllocation);
           } else {
@@ -216,14 +222,14 @@ const CampusAllocation = () => {
     if (!selectedTrainee || !selectedCampus || !allocationDate) return;
 
     try {
+      setIsAllocating(true);
 
       const response = await axiosInstance.post(API_PATHS.ALLOCATION.CREATE, {
-        traineeId: selectedTrainee._id || selectedTrainee.id,
+        traineeId: selectedTrainee.author_id || selectedTrainee._id || selectedTrainee.id,
         campusId: selectedCampus,
         allocatedDate: allocationDate,
         status: 'confirmed'
       });
-
 
       if (response.data.success) {
         fetchTrainees();
@@ -234,10 +240,13 @@ const CampusAllocation = () => {
         setAllocationDate('');
       }
     } catch (error) {
-      console.error('Error allocating campus:', error);
+      const message = error?.response?.data?.message || 'Failed to create allocation';
+      console.error('Error allocating campus:', message);
+    }
+    finally {
+      setIsAllocating(false);
     }
   };
-
 
   const handleCreateCampus = async () => {
     if (!newCampus.name || !newCampus.location || !newCampus.capacity) return;
@@ -267,11 +276,14 @@ const CampusAllocation = () => {
   };
 
   const filteredTrainees = trainees.filter(trainee => {
-    const matchesSearch = trainee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         trainee.employeeId.toLowerCase().includes(searchTerm.toLowerCase());
+    const traineeName = (trainee?.name || '').toLowerCase();
+    const empId = (trainee?.employeeId || '').toLowerCase();
+    const term = (searchTerm || '').toLowerCase();
+    const matchesSearch = traineeName.includes(term) || empId.includes(term);
+    const isAllocated = Boolean(trainee?.allocatedCampus);
     const matchesFilter = filterStatus === 'all' || 
-                         (filterStatus === 'allocated' && trainee.allocatedCampus) ||
-                         (filterStatus === 'unallocated' && !trainee.allocatedCampus);
+                         (filterStatus === 'allocated' && isAllocated) ||
+                         (filterStatus === 'unallocated' && !isAllocated);
     return matchesSearch && matchesFilter;
   });
 
@@ -510,9 +522,17 @@ const CampusAllocation = () => {
                   </button>
                   <button
                     onClick={handleAllocateCampus}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    disabled={isAllocating}
+                    className={`px-4 py-2 text-white rounded-md ${isAllocating ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                   >
-                    Allocate
+                    {isAllocating ? (
+                      <span className="inline-flex items-center">
+                        <LuLoader className="w-4 h-4 animate-spin mr-2" />
+                        Allocating...
+                      </span>
+                    ) : (
+                      'Allocate'
+                    )}
                   </button>
                 </div>
               </div>

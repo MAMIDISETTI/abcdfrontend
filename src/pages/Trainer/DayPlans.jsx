@@ -23,6 +23,7 @@ const DayPlans = () => {
   const [selectedTraineePlan, setSelectedTraineePlan] = useState(null);
   const [reviewRemarks, setReviewRemarks] = useState("");
   const [expandedPlans, setExpandedPlans] = useState({});
+  const [previewPlan, setPreviewPlan] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
   const [processingPlans, setProcessingPlans] = useState({});
   const [dateFilter, setDateFilter] = useState("");
@@ -600,7 +601,7 @@ const DayPlans = () => {
 
   return (
     <DashboardLayout activeMenu="Day Plans">
-      <div className="space-y-5">
+      <div className="space-y-5 relative">
       <div className="card my-5">
         <h2 className="text-xl font-medium">Day Plans</h2>
       </div>
@@ -687,7 +688,7 @@ const DayPlans = () => {
                   {/* Day Plan Header */}
                   <div 
                     className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 -m-2 rounded"
-                    onClick={() => togglePlanExpansion(plan._id)}
+                    onClick={() => setPreviewPlan(plan)}
                   >
                     <div className="flex-1">
                       <h4 className="font-medium">
@@ -714,16 +715,53 @@ const DayPlans = () => {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500">
-                        {expandedPlans[plan._id] ? 'Click to collapse' : 'Click to expand'}
-                      </span>
-                      <LuArrowRight className={`text-gray-400 transition-transform ${expandedPlans[plan._id] ? 'rotate-90' : ''}`} />
+                      <span className="text-sm text-blue-600">View</span>
+                      <LuArrowRight className={`text-gray-400`} />
                     </div>
                   </div>
 
-                  {/* Expanded Content */}
-                  {expandedPlans[plan._id] && (
+                  {/* Expanded Content (kept for fallback – no longer used) */}
+                  {false && expandedPlans[plan._id] && (
                     <div className="mt-4 space-y-3">
+                      {/* Total Hours */}
+                      {(() => {
+                        const parse = (s) => {
+                          if (!s) return null;
+                          const m = s.match(/(\d{1,2}):(\d{2})(am|pm)[–-](\d{1,2}):(\d{2})(am|pm)/i);
+                          if (!m) return null;
+                          const toMin = (h, mm, ap) => {
+                            let hh = parseInt(h, 10) % 12;
+                            if (ap.toLowerCase() === 'pm') hh += 12;
+                            return hh * 60 + parseInt(mm, 10);
+                          };
+                          return toMin(m[1], m[2], m[3]) - toMin(m[4], m[5], m[6]) > 0
+                            ? { start: toMin(m[4], m[5], m[6]), end: toMin(m[1], m[2], m[3]) } // unlikely
+                            : { start: toMin(m[1], m[2], m[3]), end: toMin(m[4], m[5], m[6]) };
+                        };
+                        let minutes = 0;
+                        (plan.tasks || []).forEach(t => {
+                          const r = parse(t.timeAllocation);
+                          if (r) minutes += Math.max(0, r.end - r.start);
+                        });
+                        if (plan.checkboxes) {
+                          const groups = Array.isArray(plan.checkboxes) ? [] : Object.values(plan.checkboxes);
+                          groups.forEach(g => {
+                            const arr = Array.isArray(g) ? g : Object.values(g);
+                            arr.forEach(cb => {
+                              const r = parse(cb.timeAllocation);
+                              if (r) minutes += Math.max(0, r.end - r.start);
+                            });
+                          });
+                        }
+                        const hrs = Math.floor(minutes / 60);
+                        const mins = minutes % 60;
+                        return (
+                          <div className="flex items-center justify-between rounded bg-gray-50 border p-2">
+                            <span className="text-sm text-gray-700 font-medium">Total Planned Time</span>
+                            <span className="text-sm text-gray-900 font-semibold">{hrs}h {mins}m</span>
+                          </div>
+                        );
+                      })()}
                       {/* Tasks */}
                       {plan.tasks && plan.tasks.length > 0 ? (
                         <div>
@@ -793,8 +831,7 @@ const DayPlans = () => {
                                         task._id?.toString(),
                                         task.id?.toString()
                                       ];
-                                      
-                                      
+
                                       let taskCheckboxes = null;
                                       let foundKey = null;
                                       
@@ -805,8 +842,7 @@ const DayPlans = () => {
                                           break;
                                         }
                                       }
-                                      
-                                      
+
                                       if (!taskCheckboxes || (Array.isArray(taskCheckboxes) && taskCheckboxes.length === 0) || (typeof taskCheckboxes === 'object' && Object.keys(taskCheckboxes).length === 0)) {
                                         return (
                                           <div className="text-center py-2 text-gray-500">
@@ -1024,14 +1060,14 @@ const DayPlans = () => {
                             setSelectedTraineePlan(plan);
                             setShowTraineePlanPopup(true);
                           }}
-                          className="p-1 text-gray-400 hover:text-blue-600"
+                          className="p-1 text-gray-400 hover:text-blue-600 cursor-pointer"
                           title="View Details"
                         >
                           <LuEye className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => handleTraineeDelete(plan._id)}
-                          className="p-1 text-gray-400 hover:text-red-600"
+                          className="p-1 text-gray-400 hover:text-red-600 cursor-pointer"
                           title="Delete"
                         >
                           <LuTrash className="w-4 h-4" />
@@ -1549,6 +1585,7 @@ const DayPlans = () => {
                                     </div>
                                   </div>
                 );
+
               })}
                               </div>
                               
@@ -1572,6 +1609,60 @@ const DayPlans = () => {
         </div>
       )}
       </div>
+      {/* Popup Preview */}
+      {previewPlan && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Day Plan - {moment(previewPlan.date).format('MMM DD, YYYY')}</h3>
+              <button onClick={() => setPreviewPlan(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
+            </div>
+            <div className="mb-4 text-sm text-gray-600">
+              <div> Trainee: <span className="font-medium text-gray-900">{previewPlan.trainee?.name || 'Unknown Trainee'}</span></div>
+              <div> Status: <span className="font-medium">{previewPlan.status}</span></div>
+            </div>
+            {(() => {
+              const parse = (s) => { if(!s) return null; const m=s.match(/(\d{1,2}):(\d{2})(am|pm)[–-](\d{1,2}):(\d{2})(am|pm)/i); if(!m) return null; const toMin=(h,mm,ap)=>{let hh=parseInt(h,10)%12; if(ap.toLowerCase()==='pm') hh+=12; return hh*60+parseInt(mm,10);}; return {start:toMin(m[1],m[2],m[3]), end:toMin(m[4],m[5],m[6])}; };
+              let minutes=0; (previewPlan.tasks||[]).forEach(t=>{ const r=parse(t.timeAllocation); if(r) minutes+=Math.max(0,r.end-r.start); });
+              if (previewPlan.checkboxes){ const groups = Array.isArray(previewPlan.checkboxes)?[]:Object.values(previewPlan.checkboxes); groups.forEach(g=>{ const arr=Array.isArray(g)?g:Object.values(g); arr.forEach(cb=>{ const r=parse(cb.timeAllocation); if(r) minutes+=Math.max(0,r.end-r.start); }); }); }
+              const hrs=Math.floor(minutes/60), mins=minutes%60;
+              return (<div className="flex items-center justify-between rounded bg-gray-50 border p-2 mb-4"><span className="text-sm text-gray-700 font-medium">Total Planned Time</span><span className="text-sm text-gray-900 font-semibold">{hrs}h {mins}m</span></div>);
+            })()}
+            <div className="space-y-2">
+              {(previewPlan.tasks||[]).map((task,idx)=> (
+                <div key={idx} className="border rounded-lg p-3">
+                  <div className="font-medium text-sm">{task.title}</div>
+                  <div className="text-xs text-gray-600">Time: {task.timeAllocation}</div>
+                  {(() => { const possibleKeys=[idx,String(idx),task.id,task.id?.toString()]; let tcb=null; if(previewPlan.checkboxes){ for(const k of possibleKeys){ if(previewPlan.checkboxes[k]){ tcb=previewPlan.checkboxes[k]; break; } } } if(!tcb) return null; const arr=Array.isArray(tcb)?tcb:Object.values(tcb); if(arr.length===0) return null; return (<div className="mt-2"><div className="text-sm font-medium text-gray-700 mb-1">Additional Activities</div>{arr.map((cb,i)=>(<div key={i} className="flex items-center gap-2 p-2 border rounded mb-2 bg-gray-50"><input type="checkbox" readOnly checked={!!cb.checked} className="rounded"/><span className="text-sm">{cb.label}</span>{cb.timeAllocation && <span className="text-xs text-gray-500">({cb.timeAllocation})</span>}</div>))}</div>); })()}
+                </div>
+              ))}
+            </div>
+            {/* Actions */}
+            <div className="flex justify-between items-center mt-4 pt-3 border-t">
+              <div className="text-xs text-gray-500">Current status: {previewPlan.status}</div>
+              <div className="space-x-2">
+                {(previewPlan.status === 'in_progress' || previewPlan.status === 'pending') && (
+                  <>
+                    <button
+                      onClick={() => { handleAcceptPlanFromList(previewPlan._id); setPreviewPlan(null); }}
+                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 cursor-pointer"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => { handleRejectPlanFromList(previewPlan._id); setPreviewPlan(null); }}
+                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 cursor-pointer"
+                    >
+                      Reject
+                    </button>
+                  </>
+                )}
+                <button onClick={()=>setPreviewPlan(null)} className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 cursor-pointer">Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

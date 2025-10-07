@@ -8,8 +8,7 @@ import { addThousandsSeparator } from "../../utils/helper";
 import InfoCard from "../../components/Cards/InfoCard";
 import TrainersPopup from "../../components/TrainersPopup";
 import TraineesPopup from "../../components/TraineesPopup";
-import NotificationDropdown from "../../components/NotificationDropdown";
-import { LuUsers, LuUserCheck, LuCalendar, LuEye, LuTrendingUp, LuFileText, LuBell, LuMapPin } from "react-icons/lu";
+import { LuUsers, LuUserCheck, LuCalendar, LuEye, LuTrendingUp, LuFileText, LuMapPin, LuBrain, LuX, LuCheck, LuClock } from "react-icons/lu";
 import { toast } from "react-hot-toast";
 
 const MasterTrainerDashboard = () => {
@@ -31,8 +30,8 @@ const MasterTrainerDashboard = () => {
   const [unassignedTrainees, setUnassignedTrainees] = useState([]);
   const [showAssignedTraineesPopup, setShowAssignedTraineesPopup] = useState(false);
   const [assignedTrainees, setAssignedTrainees] = useState([]);
-  const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [showActiveAssignmentsModal, setShowActiveAssignmentsModal] = useState(false);
+  const [activeAssignmentsData, setActiveAssignmentsData] = useState([]);
   const [campusAllocations, setCampusAllocations] = useState([]);
 
   // Fetch master trainer dashboard data
@@ -137,7 +136,6 @@ const MasterTrainerDashboard = () => {
     }
   };
 
-
   // Fetch trainers data
   const getTrainers = async () => {
     try {
@@ -204,13 +202,33 @@ const MasterTrainerDashboard = () => {
     }
   };
 
-  // Fetch unread notification count
-  const getUnreadNotificationCount = async () => {
+  // Fetch active assignments with exam details
+  const getActiveAssignments = async () => {
     try {
-      const res = await axiosInstance.get(API_PATHS.NOTIFICATIONS.UNREAD_COUNT);
-      setUnreadNotificationCount(res.data.unreadCount || 0);
-    } catch (error) {
-      console.error("Error fetching unread notification count:", error);
+      const res = await axiosInstance.get(API_PATHS.MASTER_TRAINER.MCQ_DEPLOYMENTS);
+      const deployments = res.data.deployments || [];
+      
+      // Filter active deployments and add exam statistics
+      const activeDeployments = deployments
+        .filter(deployment => deployment.status === 'active' || deployment.status === 'scheduled')
+        .map(deployment => {
+          const currentlyWriting = deployment.results?.filter(r => r.status === 'in_progress').length || 0;
+          const totalWritten = deployment.results?.filter(r => r.status === 'completed').length || 0;
+          const totalAssigned = deployment.targetTrainees?.length || 0;
+          
+          return {
+            ...deployment,
+            currentlyWriting,
+            totalWritten,
+            totalAssigned,
+            notStarted: totalAssigned - currentlyWriting - totalWritten
+          };
+        });
+      
+      setActiveAssignmentsData(activeDeployments);
+    } catch (err) {
+      console.error("Error fetching active assignments:", err);
+      toast.error("Failed to fetch active assignments data");
     }
   };
 
@@ -245,6 +263,13 @@ const MasterTrainerDashboard = () => {
     }
   };
 
+  // Handle active assignments click
+  const handleActiveAssignmentsClick = () => {
+    setShowActiveAssignmentsModal(true);
+    if (activeAssignmentsData.length === 0) {
+      getActiveAssignments();
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -255,12 +280,25 @@ const MasterTrainerDashboard = () => {
       }, 100);
       getUnassignedTrainees(); // Fetch unassigned trainees on component load
       getAssignedTrainees(); // Fetch assigned trainees on component load
-      getUnreadNotificationCount(); // Fetch unread notification count
       fetchCampusAllocations(); // Fetch campus allocation data
     };
-    
+
     loadData();
   }, []);
+
+  // Real-time updates for active assignments modal
+  useEffect(() => {
+    let interval;
+    if (showActiveAssignmentsModal) {
+      // Update every 5 seconds when modal is open
+      interval = setInterval(() => {
+        getActiveAssignments();
+      }, 5000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [showActiveAssignmentsModal]);
 
   if (loading) {
     return (
@@ -284,26 +322,6 @@ const MasterTrainerDashboard = () => {
             </p>
           </div>
           
-          {/* Clock In/Out Section */}
-          <div className="mt-4 md:mt-0">
-            <div className="flex items-center space-x-3">
-              {/* Notification Bell */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowNotificationDropdown(true)}
-                  className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <LuBell className="w-6 h-6" />
-                  {unreadNotificationCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                      {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
-                    </span>
-                  )}
-                </button>
-              </div>
-
-            </div>
-          </div>
         </div>
 
         {/* Overview Cards */}
@@ -349,6 +367,8 @@ const MasterTrainerDashboard = () => {
             value={addThousandsSeparator(dashboardData?.overview?.activeAssignments || 0)}
             color="bg-purple-500"
             icon={<LuCalendar className="w-5 h-5" />}
+            onClick={handleActiveAssignmentsClick}
+            clickable={true}
           />
         </div>
       </div>
@@ -459,6 +479,40 @@ const MasterTrainerDashboard = () => {
               <span className="text-sm text-gray-600">Trainees Assigned</span>
               <span className="font-semibold text-purple-600">
                 {dashboardData?.assignments?.totalTraineesAssigned || 0}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* MCQ Exams Statistics */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h5 className="font-medium text-gray-700">MCQ Exams</h5>
+            <LuBrain className="w-5 h-5 text-purple-500" />
+          </div>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Total Exams</span>
+              <span className="font-semibold text-gray-800">
+                {dashboardData?.mcqExams?.totalExams || 0}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Active Exams</span>
+              <span className="font-semibold text-green-600">
+                {dashboardData?.mcqExams?.activeExams || 0}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Currently Writing</span>
+              <span className="font-semibold text-orange-600">
+                {dashboardData?.mcqExams?.currentlyWriting || 0}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Total Written</span>
+              <span className="font-semibold text-blue-600">
+                {dashboardData?.mcqExams?.totalWritten || 0}
               </span>
             </div>
           </div>
@@ -604,11 +658,153 @@ const MasterTrainerDashboard = () => {
         title="Assigned Trainees"
       />
 
-      {/* Notification Dropdown */}
-      <NotificationDropdown
-        isOpen={showNotificationDropdown}
-        onClose={() => setShowNotificationDropdown(false)}
-      />
+      {/* Active Assignments Modal */}
+      {showActiveAssignmentsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">Active Assignments</h3>
+                  <p className="text-gray-600">Real-time exam statistics and progress</p>
+                </div>
+                <button
+                  onClick={() => setShowActiveAssignmentsModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <LuX className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-600 font-medium">Total Active</p>
+                      <p className="text-2xl font-bold text-blue-900">{activeAssignmentsData.length}</p>
+                    </div>
+                    <LuCalendar className="w-8 h-8 text-blue-500" />
+                  </div>
+                </div>
+                
+                <div className="bg-orange-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-orange-600 font-medium">Currently Writing</p>
+                      <p className="text-2xl font-bold text-orange-900">
+                        {activeAssignmentsData.reduce((sum, assignment) => sum + assignment.currentlyWriting, 0)}
+                      </p>
+                    </div>
+                    <LuBrain className="w-8 h-8 text-orange-500" />
+                  </div>
+                </div>
+                
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-green-600 font-medium">Total Written</p>
+                      <p className="text-2xl font-bold text-green-900">
+                        {activeAssignmentsData.reduce((sum, assignment) => sum + assignment.totalWritten, 0)}
+                      </p>
+                    </div>
+                    <LuCheck className="w-8 h-8 text-green-500" />
+                  </div>
+                </div>
+                
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-purple-600 font-medium">Not Started</p>
+                      <p className="text-2xl font-bold text-purple-900">
+                        {activeAssignmentsData.reduce((sum, assignment) => sum + assignment.notStarted, 0)}
+                      </p>
+                    </div>
+                    <LuClock className="w-8 h-8 text-purple-500" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Assignments List */}
+              <div className="space-y-4">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4">Assignment Details</h4>
+                {activeAssignmentsData.length === 0 ? (
+                  <div className="text-center py-8">
+                    <LuCalendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500 text-lg">No active assignments found</p>
+                  </div>
+                ) : (
+                  activeAssignmentsData.map((assignment, index) => (
+                    <div key={assignment._id || index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h5 className="text-lg font-semibold text-gray-900">{assignment.name}</h5>
+                          <p className="text-sm text-gray-600">
+                            {assignment.questions?.length || 0} questions • {assignment.duration} minutes
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Scheduled: {moment(assignment.scheduledDateTime).format('MMM DD, YYYY h:mm A')}
+                          </p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          assignment.status === 'active' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {assignment.status === 'active' ? 'Active' : 'Scheduled'}
+                        </span>
+                      </div>
+                      
+                      {/* Progress Bar */}
+                      <div className="mb-3">
+                        <div className="flex justify-between text-sm text-gray-600 mb-1">
+                          <span>Progress</span>
+                          <span>
+                            {assignment.totalAssigned > 0 
+                              ? Math.round(((assignment.totalWritten + assignment.currentlyWriting) / assignment.totalAssigned) * 100)
+                              : 0}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            style={{ 
+                              width: `${assignment.totalAssigned > 0 
+                                ? ((assignment.totalWritten + assignment.currentlyWriting) / assignment.totalAssigned) * 100
+                                : 0}%` 
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                      
+                      {/* Statistics */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-orange-600">{assignment.currentlyWriting}</p>
+                          <p className="text-xs text-gray-600">Writing Now</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-600">{assignment.totalWritten}</p>
+                          <p className="text-xs text-gray-600">Completed</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-purple-600">{assignment.notStarted}</p>
+                          <p className="text-xs text-gray-600">Not Started</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">{assignment.totalAssigned}</p>
+                          <p className="text-xs text-gray-600">Total Assigned</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

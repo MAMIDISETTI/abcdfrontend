@@ -18,6 +18,17 @@ const JoinerWorkflowPopup = ({ isOpen, onClose, joiner, joiners = [], onSuccess 
   const [selectedTrainees, setSelectedTrainees] = useState([]);
   const [isBulkMode, setIsBulkMode] = useState(false);
 
+  // Helpers to ensure unique lists/keys
+  const getTraineeId = (t) => t?.author_id || t?._id || t?.email || t?.candidate_personal_mail_id || '';
+  const dedupeById = (list) => {
+    const map = new Map();
+    (list || []).forEach((t) => {
+      const k = getTraineeId(t) || JSON.stringify(t);
+      if (!map.has(k)) map.set(k, t);
+    });
+    return Array.from(map.values());
+  };
+
   // Check if joiner already has user account and assigned trainer
   useEffect(() => {
     if (isOpen && joiner) {
@@ -29,14 +40,14 @@ const JoinerWorkflowPopup = ({ isOpen, onClose, joiner, joiners = [], onSuccess 
   useEffect(() => {
     if (isOpen && joiners.length > 0) {
       setIsBulkMode(true);
-      setSelectedTrainees(joiners);
+      setSelectedTrainees(dedupeById(joiners));
       // Fetch trainers for bulk mode
       fetchTrainers();
       // Start at step 2 for bulk mode
       setCurrentStep(2);
     } else if (isOpen && joiner) {
       setIsBulkMode(false);
-      setSelectedTrainees([joiner]);
+      setSelectedTrainees(dedupeById([joiner]));
       // Fetch trainers for single mode
       fetchTrainers();
       // Start at step 1 for single mode
@@ -72,8 +83,7 @@ const JoinerWorkflowPopup = ({ isOpen, onClose, joiner, joiners = [], onSuccess 
       // Check if user exists by email
       const response = await axiosInstance.get(`${API_PATHS.USERS.LIST}?email=${emailToCheck}`);
       const users = response.data.users || [];
-      
-      
+
       if (users.length > 0) {
         const user = users[0];
         setExistingUser(user);
@@ -157,7 +167,7 @@ const JoinerWorkflowPopup = ({ isOpen, onClose, joiner, joiners = [], onSuccess 
     if (selectedTrainees.length === joiners.length) {
       setSelectedTrainees([]);
     } else {
-      setSelectedTrainees([...joiners]);
+      setSelectedTrainees(dedupeById([...joiners]));
     }
   };
 
@@ -214,9 +224,7 @@ const JoinerWorkflowPopup = ({ isOpen, onClose, joiner, joiners = [], onSuccess 
             candidate_personal_mail_id: trainee.candidate_personal_mail_id || trainee.email,
             top_department_name_as_per_darwinbox: trainee.top_department_name_as_per_darwinbox || trainee.department,
             department_name_as_per_darwinbox: trainee.department_name_as_per_darwinbox || trainee.department,
-            joining_status: trainee.joining_status || trainee.status,
-            employeeId: trainee.employee_id,
-            genre: trainee.genre,
+            joining_status: trainee.joining_status || trainee.status,     
             role_type: trainee.role_type,
             role_assign: trainee.role_assign,
             qualification: trainee.qualification,
@@ -331,9 +339,7 @@ const JoinerWorkflowPopup = ({ isOpen, onClose, joiner, joiners = [], onSuccess 
           top_department_name_as_per_darwinbox: joiner.top_department_name_as_per_darwinbox || joiner.department,
           department_name_as_per_darwinbox: joiner.department_name_as_per_darwinbox || joiner.department,
           joining_status: joiner.joining_status || joiner.status,
-          // author_id will be generated automatically by the backend
-          employeeId: joiner.employee_id,
-          genre: joiner.genre,
+          // author_id will be generated automatically by the backend     
           role_type: joiner.role_type,
           role_assign: joiner.role_assign,
           qualification: joiner.qualification,
@@ -360,8 +366,7 @@ const JoinerWorkflowPopup = ({ isOpen, onClose, joiner, joiners = [], onSuccess 
           dailyQuizzes: joiner.dailyQuizzes || [],
           courseLevelExams: joiner.courseLevelExams || []
         };
-        
-        
+
         // Create user account
         const userResponse = await axiosInstance.post(API_PATHS.USERS.CREATE_USER, userData);
 
@@ -493,8 +498,8 @@ const JoinerWorkflowPopup = ({ isOpen, onClose, joiner, joiners = [], onSuccess 
                 
                 {isBulkMode ? (
                   <div className="space-y-3">
-                    {selectedTrainees.map((trainee) => (
-                      <div key={trainee.author_id} className="p-4 bg-white rounded-lg border">
+                    {selectedTrainees.map((trainee, idx) => (
+                      <div key={`${getTraineeId(trainee)}-${idx}`} className="p-4 bg-white rounded-lg border">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="flex items-center space-x-3">
                             <LuUser className="w-5 h-5 text-gray-400" />
@@ -676,9 +681,9 @@ const JoinerWorkflowPopup = ({ isOpen, onClose, joiner, joiners = [], onSuccess 
                     </div>
 
                     <div className="max-h-64 overflow-y-auto space-y-2">
-                      {joiners.map((trainee) => (
+                      {dedupeById(joiners).map((trainee, idx) => (
                         <div
-                          key={trainee.author_id}
+                          key={`${getTraineeId(trainee)}-${idx}`}
                           className={`flex items-center justify-between p-3 rounded-lg border-2 transition-colors ${
                             selectedTrainees.some(t => t.author_id === trainee.author_id)
                               ? 'border-blue-500 bg-blue-50'
@@ -720,9 +725,9 @@ const JoinerWorkflowPopup = ({ isOpen, onClose, joiner, joiners = [], onSuccess 
                         <p className="text-gray-500 mt-2">Loading trainers...</p>
                       </div>
                     ) : trainers.length > 0 ? (
-                      trainers.map((trainer) => (
+                      trainers.map((trainer, idx) => (
                         <div
-                          key={trainer.author_id}
+                          key={`${trainer.author_id || trainer._id || trainer.email}-${idx}`}
                           onClick={() => !isAlreadyAssigned && handleTrainerSelect(trainer)}
                           className={`p-4 rounded-lg border-2 transition-colors ${
                             isAlreadyAssigned 

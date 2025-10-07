@@ -1,4 +1,5 @@
-export const BASE_URL = import.meta.env.VITE_API_URL || 'https://task-backend-fetch-data.onrender.com/';
+export const BASE_URL = import.meta.env.VITE_API_URL || 'https://abcdbackend-wytb.onrender.com';
+
 
 // utils/apiPaths.js
 export const API_PATHS = {
@@ -160,6 +161,10 @@ export const API_PATHS = {
 
   TRAINEE: {
     CAMPUS_ALLOCATION: "/api/trainee/campus-allocation",
+    MCQ_DEPLOYMENTS: "/api/mcq-deployments/trainee",
+    START_MCQ: (deploymentId) => `/api/mcq-deployments/trainee/${deploymentId}/start`,
+    SUBMIT_MCQ: (deploymentId) => `/api/mcq-deployments/trainee/${deploymentId}/submit`,
+    MCQ_RESULTS: "/api/mcq-deployments/trainee/results",
   },
   CAMPUS: {
     CREATE: "/api/campus",
@@ -174,5 +179,39 @@ export const API_PATHS = {
     GET_BY_ID: (id) => `/api/allocation/${id}`,
     UPDATE: (id) => `/api/allocation/${id}`,
     DELETE: (id) => `/api/allocation/${id}`,
+  },
+
+  ADMIN: {
+    CREATE: "/api/admin/create",
+    USERS: "/api/admin/users",
+    PROMOTE_USER: "/api/admin/users/promote",
+    DEACTIVATE_USER: "/api/admin/users/deactivate",
+    REACTIVATE_USER: "/api/admin/users/reactivate",
+    USER_ROLE_HISTORY: (userId) => `/api/admin/users/${userId}/role-history`,
+    STATS: "/api/admin/stats",
+    MCQ_DEPLOYMENTS: "/api/mcq-deployments/admin",
+  },
+
+  MASTER_TRAINER: {
+    MCQ_DEPLOYMENTS: "/api/mcq-deployments/master-trainer",
+  },
+
+  TRAINER: {
+    ASSIGNED_TRAINEES: "/api/trainer/assigned-trainees",
+    TRAINEE_RESULTS: "/api/trainer/trainee-results",
+  },
+
+  BOA: {
+    MCQ_RESULTS: "/api/mcq-deployments/boa",
+    UPLOAD_RESULTS: "/api/mcq-deployments/boa/upload-results",
+  },
+
+  // Notifications API paths
+  NOTIFICATIONS: {
+    GET_NOTIFICATIONS: "/api/notifications",
+    GET_UNREAD_COUNT: "/api/notifications/unread-count",
+    MARK_AS_READ: (notificationId) => `/api/notifications/${notificationId}/read`,
+    MARK_ALL_READ: "/api/notifications/mark-all-read",
+    DELETE: (notificationId) => `/api/notifications/${notificationId}`,
   },
 };

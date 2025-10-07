@@ -270,7 +270,7 @@ const AbsentDashboard = () => {
                       </span>
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <button className="text-blue-600 hover:text-blue-900">View Details</button>
+                      <button className="cursor-pointer text-blue-600 hover:text-blue-900">View Details</button>
                     </td>
                   </tr>
                 ))}

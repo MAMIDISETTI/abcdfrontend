@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from "react";
-import { SIDE_MENU_DATA, SIDE_MENU_USER_DATA, SIDE_MENU_TRAINER_DATA, SIDE_MENU_TRAINEE_DATA, SIDE_MENU_MASTER_TRAINER_DATA, SIDE_MENU_BOA_DATA } from "../../utils/data";
+import { SIDE_MENU_DATA, SIDE_MENU_USER_DATA, SIDE_MENU_TRAINER_DATA, SIDE_MENU_TRAINEE_DATA, SIDE_MENU_MASTER_TRAINER_DATA, SIDE_MENU_BOA_DATA, SIDE_MENU_ADMIN_DATA } from "../../utils/data";
 import { UserContext } from "../../context/userContext";
 import { useNavigate } from "react-router-dom";
 import { LuChevronDown, LuChevronRight } from "react-icons/lu";
@@ -29,7 +29,6 @@ const SideMenu = ({ activeMenu, onMenuClick }) => {
         "mt03": true
       }));
     }
-
 
     navigate(route);
     
@@ -62,7 +61,7 @@ const SideMenu = ({ activeMenu, onMenuClick }) => {
   useEffect(() => {
     if(user){
       if (user.role === 'admin') {
-        setSideMenuData(SIDE_MENU_DATA);
+        setSideMenuData(SIDE_MENU_ADMIN_DATA);
       } else if (user.role === 'trainer') {
         setSideMenuData(SIDE_MENU_TRAINER_DATA);
       } else if (user.role === 'trainee') {
@@ -95,7 +94,7 @@ const SideMenu = ({ activeMenu, onMenuClick }) => {
       }
     }
   }, [activeMenu, user?.role]);
-  return <div className="w-64 h-[calc(100vh-61px)] bg-white border-r border-gray-200/50 lg:sticky lg:top-[61px] z-20">
+  return <div className="w-64 h-[calc(100vh-50px)] bg-white border-r border-gray-200/50 lg:sticky lg:top-[61px] z-20">
       <div className="flex flex-col items-center justify-center mb-7 pt-5">
         <div className="relative">
           {user?.profileImageUrl ? (

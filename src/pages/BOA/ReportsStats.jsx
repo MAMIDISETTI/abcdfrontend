@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
-import { LuTrendingUp, LuDownload, LuFilter, LuCalendar, LuUsers, LuFileSpreadsheet, LuEye, LuCheck } from 'react-icons/lu';
+import { LuTrendingUp, LuDownload, LuFilter, LuCalendar, LuUsers, LuFileSpreadsheet, LuEye, LuCheck, LuX } from 'react-icons/lu';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import moment from 'moment';
 import axiosInstance from '../../utils/axiosInstance';
@@ -15,6 +15,8 @@ const ReportsStats = () => {
     endDate: moment().format('YYYY-MM-DD')
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   // Real data for charts
   const [chartData, setChartData] = useState({
@@ -483,8 +485,268 @@ const ReportsStats = () => {
     { value: 'trainers', label: 'Trainer Performance', icon: LuTrendingUp }
   ];
 
-  const handleDownloadReport = (reportType) => {
-    // Simulate download
+  // Fetch joiners data for download
+  const fetchJoinersForDownload = async () => {
+    try {
+      const response = await axiosInstance.get(API_PATHS.JOINERS.GET_ALL);
+      return response.data.joiners || [];
+    } catch (error) {
+      console.error('Error fetching joiners data:', error);
+      return [];
+    }
+  };
+
+  // Fetch working trainees data
+  const fetchTraineesData = async () => {
+    try {
+      const response = await axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS);
+      const trainees = response.data.users.filter(user => user.role === 'trainee');
+      return trainees;
+    } catch (error) {
+      console.error('Error fetching trainees data:', error);
+      return [];
+    }
+  };
+
+  // Fetch detailed joiners data for New Joiners tab
+  const fetchDetailedJoinersData = async () => {
+    try {
+      const response = await axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS);
+      const joiners = response.data.users.filter(user => user.role === 'trainee');
+      
+      // Sort by joining date (newest first)
+      return joiners.sort((a, b) => {
+        const dateA = new Date(a.joiningDate || a.createdAt);
+        const dateB = new Date(b.joiningDate || b.createdAt);
+        return dateB - dateA;
+      });
+    } catch (error) {
+      console.error('Error fetching detailed joiners data:', error);
+      return [];
+    }
+  };
+
+  // Fetch exam results data for Exam Results tab
+  const fetchExamResultsData = async () => {
+    try {
+      const response = await axiosInstance.get(API_PATHS.RESULTS.GET_ALL);
+      return response.data.results || [];
+    } catch (error) {
+      console.error('Error fetching exam results data:', error);
+      return [];
+    }
+  };
+
+  // Generate CSV for joiners data
+  const generateJoinersCSV = (data) => {
+    const headers = [
+      'Author ID',
+      'Name',
+      'Email',
+      'Phone',
+      'Department',
+      'Designation',
+      'Joining Date',
+      'Status',
+      'Created At'
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      ...data.map(joiner => [
+        joiner.author_id || '',
+        `"${joiner.name || ''}"`,
+        joiner.email || '',
+        joiner.phone || '',
+        `"${joiner.department || ''}"`,
+        `"${joiner.designation || ''}"`,
+        joiner.joining_date || '',
+        joiner.status || '',
+        joiner.created_at || ''
+      ].join(','))
+    ].join('\n');
+
+    return csvContent;
+  };
+
+  // Generate CSV for trainees data
+  const generateTraineesCSV = (data) => {
+    const headers = [
+      'Author ID',
+      'Name',
+      'Email',
+      'Phone',
+      'Department',
+      'Designation',
+      'Assigned Trainer',
+      'Status',
+      'Created At',
+      'Last Login'
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      ...data.map(trainee => [
+        trainee.author_id || '',
+        `"${trainee.name || ''}"`,
+        trainee.email || '',
+        trainee.phone || '',
+        `"${trainee.department || ''}"`,
+        `"${trainee.designation || ''}"`,
+        trainee.assignedTrainer || 'Not Assigned',
+        trainee.status || 'active',
+        trainee.created_at || '',
+        trainee.last_login || 'Never'
+      ].join(','))
+    ].join('\n');
+
+    return csvContent;
+  };
+
+  // Generate CSV for detailed joiners data (New Joiners tab)
+  const generateDetailedJoinersCSV = (data) => {
+    const headers = [
+      'Author ID',
+      'Name',
+      'Email',
+      'Phone',
+      'Department',
+      'Designation',
+      'Joining Date',
+      'Status',
+      'Assigned Trainer',
+      'Created At',
+      'Last Login'
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      ...data.map(joiner => [
+        joiner.author_id || '',
+        `"${joiner.name || ''}"`,
+        joiner.email || '',
+        joiner.phone || '',
+        `"${joiner.department || ''}"`,
+        `"${joiner.designation || ''}"`,
+        joiner.joiningDate || joiner.createdAt || '',
+        joiner.status || 'active',
+        joiner.assignedTrainer || 'Not Assigned',
+        joiner.createdAt || '',
+        joiner.last_login || 'Never'
+      ].join(','))
+    ].join('\n');
+
+    return csvContent;
+  };
+
+  // Generate CSV for exam results data (Exam Results tab)
+  const generateExamResultsCSV = (data) => {
+    const headers = [
+      'Result ID',
+      'Trainee Name',
+      'Trainee ID',
+      'Exam Type',
+      'Score',
+      'Total Marks',
+      'Percentage',
+      'Status',
+      'Exam Date',
+      'Uploaded At',
+      'Uploaded By'
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      ...data.map(result => [
+        result._id || '',
+        `"${result.trainee_name || ''}"`,
+        result.author_id || '',
+        result.exam_type || '',
+        result.score || 0,
+        result.total_marks || 0,
+        result.percentage || 0,
+        result.status || '',
+        result.exam_date || '',
+        result.uploaded_at || '',
+        `"${result.uploaded_by || ''}"`
+      ].join(','))
+    ].join('\n');
+
+    return csvContent;
+  };
+
+  // Download CSV file
+  const downloadCSV = (csvContent, filename) => {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Handle download report
+  const handleDownloadReport = async (reportType) => {
+    if (reportType === 'overview') {
+      setShowDownloadModal(true);
+    } else if (reportType === 'joiners') {
+      // Download New Joiners data directly
+      setDownloading(true);
+      try {
+        const data = await fetchDetailedJoinersData();
+        const filename = `New_Joiners_Data_${moment().format('YYYY-MM-DD')}.csv`;
+        const csvContent = generateDetailedJoinersCSV(data);
+        downloadCSV(csvContent, filename);
+      } catch (error) {
+        console.error('Error downloading joiners data:', error);
+      } finally {
+        setDownloading(false);
+      }
+    } else if (reportType === 'exams') {
+      // Download Exam Results data directly
+      setDownloading(true);
+      try {
+        const data = await fetchExamResultsData();
+        const filename = `Exam_Results_Data_${moment().format('YYYY-MM-DD')}.csv`;
+        const csvContent = generateExamResultsCSV(data);
+        downloadCSV(csvContent, filename);
+      } catch (error) {
+        console.error('Error downloading exam results data:', error);
+      } finally {
+        setDownloading(false);
+      }
+    } else {
+      // For other report types, implement as needed
+      console.log('Download report for:', reportType);
+    }
+  };
+
+  // Handle download selection
+  const handleDownloadSelection = async (dataType) => {
+    setDownloading(true);
+    try {
+      let data, filename, csvContent;
+      
+      if (dataType === 'joiners') {
+        data = await fetchJoinersForDownload();
+        filename = `Total_Joiners_Data_${moment().format('YYYY-MM-DD')}.csv`;
+        csvContent = generateJoinersCSV(data);
+      } else if (dataType === 'trainees') {
+        data = await fetchTraineesData();
+        filename = `Working_Trainees_Data_${moment().format('YYYY-MM-DD')}.csv`;
+        csvContent = generateTraineesCSV(data);
+      }
+      
+      downloadCSV(csvContent, filename);
+      setShowDownloadModal(false);
+    } catch (error) {
+      console.error('Error downloading data:', error);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (loading) {
@@ -594,7 +856,6 @@ const ReportsStats = () => {
               )}
             </div>
 
-            
             <div className="flex space-x-2">
               <button
                 onClick={fetchData}
@@ -607,10 +868,11 @@ const ReportsStats = () => {
               
               <button
                 onClick={() => handleDownloadReport(selectedReport)}
-                className="cursor-pointer flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={downloading}
+                className="cursor-pointer flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <LuDownload className="w-4 h-4" />
-                <span>Download Report</span>
+                <span>{downloading ? 'Downloading...' : 'Download Report'}</span>
               </button>
             </div>
           </div>
@@ -1127,6 +1389,52 @@ const ReportsStats = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Download Modal */}
+        {showDownloadModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Download Report</h3>
+                <button
+                  onClick={() => setShowDownloadModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <LuX className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <p className="text-gray-600 mb-6">
+                Choose which data you want to download:
+              </p>
+              
+              <div className="space-y-3">
+                <button
+                  onClick={() => handleDownloadSelection('joiners')}
+                  disabled={downloading}
+                  className="w-full flex items-center justify-center space-x-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <LuUsers className="w-5 h-5" />
+                  <span>{downloading ? 'Downloading...' : 'Total Joiners Data'}</span>
+                </button>
+                
+                <button
+                  onClick={() => handleDownloadSelection('trainees')}
+                  disabled={downloading}
+                  className="w-full flex items-center justify-center space-x-2 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <LuUsers className="w-5 h-5" />
+                  <span>{downloading ? 'Downloading...' : 'Working Trainees Data'}</span>
+                </button>
+              </div>
+              
+              <div className="mt-4 text-sm text-gray-500">
+                <p>• Total Joiners Data: All people who have joined the program</p>
+                <p>• Working Trainees Data: Currently active trainees</p>
               </div>
             </div>
           </div>

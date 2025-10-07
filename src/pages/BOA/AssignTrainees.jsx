@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
-import { LuUsers, LuUserCheck, LuSearch, LuPlus, LuX, LuEye, LuCheck } from 'react-icons/lu';
+import { LuUsers, LuUserCheck, LuSearch, LuPlus, LuX, LuEye, LuCheck, LuRefreshCw } from 'react-icons/lu';
 import { toast } from 'react-hot-toast';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
@@ -49,6 +49,11 @@ const AssignTrainees = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Refresh data function
+  const refreshData = () => {
+    loadAllData();
   };
 
   // Fetch trainees data
@@ -101,8 +106,14 @@ const AssignTrainees = () => {
       });
       
       // Filter for assigned trainees (those with assignedTrainer)
-      const assignedTraineesData = (response.data.users || response.data || []).filter(trainee => trainee.assignedTrainer);
+      const allTrainees = response.data.users || response.data || [];
+      const assignedTraineesData = allTrainees.filter(trainee => trainee.assignedTrainer);
       setAssignedTrainees(assignedTraineesData);
+      
+      // Debug logging
+      console.log('All trainees:', allTrainees.length);
+      console.log('Assigned trainees:', assignedTraineesData.length);
+      console.log('Unassigned trainees:', unassignedTrainees.length);
     } catch (error) {
       console.error('Error fetching assigned trainees:', error);
       toast.error('Failed to fetch assigned trainees data');
@@ -111,6 +122,15 @@ const AssignTrainees = () => {
 
   useEffect(() => {
     loadAllData();
+  }, []);
+
+  // Auto-refresh every 30 seconds to catch updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshData();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
   }, []);
 
   // Filter trainees based on search term and pagination
@@ -220,8 +240,8 @@ const AssignTrainees = () => {
     setAssignmentStep('select-trainer');
   };
 
-  const handleTrainerSelection = (trainerId) => {
-    setSelectedTrainer(trainerId);
+  const handleTrainerSelection = (trainer) => {
+    setSelectedTrainer(trainer.author_id || trainer._id);
   };
 
   const handleSubmitAssignment = async () => {
@@ -340,11 +360,12 @@ const AssignTrainees = () => {
           
           <div className="flex items-center space-x-3 mt-4 md:mt-0">
             <button
-              onClick={loadAllData}
-              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center space-x-2"
+              onClick={refreshData}
+              disabled={loading}
+              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <LuSearch className="w-4 h-4" />
-              <span>Refresh</span>
+              <LuRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
             </button>
             <button
               onClick={handleAssignTrainees}
@@ -382,7 +403,7 @@ const AssignTrainees = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Assigned Trainees</p>
-                <p className="text-2xl font-bold text-green-600">{trainees.length - unassignedTrainees.length}</p>
+                <p className="text-2xl font-bold text-green-600">{assignedTrainees.length}</p>
               </div>
               <LuUserCheck className="w-8 h-8 text-green-500" />
             </div>
@@ -602,7 +623,7 @@ const AssignTrainees = () => {
                         <div className="text-sm text-purple-800">Total Trainers</div>
                       </div>
                       <div className="bg-green-50 p-4 rounded-lg text-center">
-                        <div className="text-2xl font-bold text-green-600">{trainees.length - unassignedTrainees.length}</div>
+                        <div className="text-2xl font-bold text-green-600">{assignedTrainees.length}</div>
                         <div className="text-sm text-green-800">Assigned Trainees</div>
                       </div>
                       <div className="bg-orange-50 p-4 rounded-lg text-center">
@@ -687,7 +708,7 @@ const AssignTrainees = () => {
                       </h4>
                       <div className="flex flex-wrap gap-2">
                         {selectedTrainees.map(traineeId => {
-                          const trainee = trainees.find(t => t._id === traineeId);
+                          const trainee = trainees.find(t => t.author_id === traineeId);
                           return trainee ? (
                             <span key={traineeId} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
                               {trainee.name}
@@ -706,9 +727,9 @@ const AssignTrainees = () => {
                         {trainers.map((trainer) => (
                           <div
                             key={trainer._id}
-                            onClick={() => handleTrainerSelection(trainer._id)}
+                            onClick={() => handleTrainerSelection(trainer)}
                             className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                              selectedTrainer === trainer._id
+                              selectedTrainer === (trainer.author_id || trainer._id)
                                 ? 'border-blue-500 bg-blue-50'
                                 : 'border-gray-200 hover:border-gray-300'
                             }`}
@@ -717,8 +738,8 @@ const AssignTrainees = () => {
                               <div className="flex items-center space-x-3">
                                 <input
                                   type="radio"
-                                  checked={selectedTrainer === trainer._id}
-                                  onChange={() => handleTrainerSelection(trainer._id)}
+                                  checked={selectedTrainer === (trainer.author_id || trainer._id)}
+                                  onChange={() => handleTrainerSelection(trainer)}
                                   className="h-4 w-4 text-blue-600 focus:ring-blue-500"
                                 />
                                 <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">

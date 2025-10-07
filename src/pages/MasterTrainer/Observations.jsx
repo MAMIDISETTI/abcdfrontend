@@ -25,7 +25,6 @@ const MasterTrainerObservations = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
 
-
   useEffect(() => {
     fetchObservations();
   }, []);
@@ -46,8 +45,7 @@ const MasterTrainerObservations = () => {
 
   const handleReviewObservation = (observation) => {
     // TODO: Implement review functionality
-    console.log('Review observation:', observation);
-  };
+    };
 
   const filteredObservations = observations.filter(observation => {
     const traineeName = observation.trainee?.name || 'Unknown Trainee';
@@ -58,7 +56,6 @@ const MasterTrainerObservations = () => {
     const matchesFilter = filterCategory === 'all' || observation.overallRating === filterCategory;
     return matchesSearch && matchesFilter;
   });
-
 
   return (
     <DashboardLayout activeMenu="Observations">

@@ -3,6 +3,7 @@ import {
     LuUsers,
     LuUser,
     LuClipboardCheck,
+    LuBell,
     LuSquarePlus,
     LuLogOut,
     LuCalendar,
@@ -17,10 +18,50 @@ import {
     LuChevronRight,
     LuFileText,
     LuTarget,
-    LuMapPin
+    LuMapPin,
+    LuBookOpen,
+    LuBrain
   } from "react-icons/lu";
-  
-  
+
+  export const SIDE_MENU_ADMIN_DATA = [
+    {
+      id: "01",
+      label: "Dashboard",
+      icon: LuLayoutDashboard,
+      path: "/admin/dashboard",
+    },
+    {
+      id: "02",
+      label: "User Management",
+      icon: LuUsers,
+      path: "/admin/users",
+    },
+    {
+      id: "03",
+      label: "Role Management",
+      icon: LuUserPlus,
+      path: "/admin/roles",
+    },
+    {
+      id: "04",
+      label: "MCQ Deployments",
+      icon: LuBrain,
+      path: "/admin/mcq-deployments",
+    },
+    {
+      id: "05",
+      label: "System Stats",
+      icon: LuTrendingUp,
+      path: "/admin/stats",
+    },
+    {
+      id: "06",
+      label: "Settings",
+      icon: LuSettings,
+      path: "/admin/settings",
+    },
+  ];
+
   export const SIDE_MENU_DATA = [
     {
       id: "01",
@@ -101,6 +142,18 @@ import {
       path: "/trainer/demo-management",
     },
     {
+      id: "t06",
+      label: "Results",
+      icon: LuClipboardCheck,
+      path: "/trainer/results",
+    },
+    {
+      id: "t07",
+      label: "Notifications",
+      icon: LuBell,
+      path: "/trainer/notifications",
+    },
+    {
       id: "t99",
       label: "Logout",
       icon: LuLogOut,
@@ -114,6 +167,18 @@ import {
       label: "Dashboard",
       icon: LuLayoutDashboard,
       path: "/trainee/dashboard",
+    },
+    {
+      id: "u07",
+      label: "Assignments",
+      icon: LuBookOpen,
+      path: "/trainee/assignments",
+    },
+    {
+      id: "u08",
+      label: "Results",
+      icon: LuClipboardCheck,
+      path: "/trainee/results",
     },
     {
       id: "u06",
@@ -132,6 +197,12 @@ import {
       label: "Profile & Settings",
       icon: LuUser,
       path: "/trainee/profile-settings",
+    },
+    {
+      id: "u06",
+      label: "Notifications",
+      icon: LuBell,
+      path: "/trainee/notifications",
     },
     {
       id: "u99",
@@ -190,6 +261,18 @@ import {
       path: "/master-trainer/users",
     },
     {
+      id: "mt08",
+      label: "Results",
+      icon: LuClipboardCheck,
+      path: "/master-trainer/results",
+    },
+    {
+      id: "mt09",
+      label: "Notifications",
+      icon: LuBell,
+      path: "/master-trainer/notifications",
+    },
+    {
       id: "mt99",
       label: "Logout",
       icon: LuLogOut,
@@ -218,6 +301,12 @@ import {
       path: "/boa/upload-results",
     },
     {
+      id: "boa06",
+      label: "Results",
+      icon: LuFileText,
+      path: "/boa/results",
+    },
+    {
       id: "boa04",
       label: "Reports & Stats",
       icon: LuTrendingUp,
@@ -228,6 +317,12 @@ import {
       label: "Settings",
       icon: LuSettings,
       path: "/boa/settings",
+    },
+    {
+      id: "boa06",
+      label: "Notifications",
+      icon: LuBell,
+      path: "/boa/notifications",
     },
     {
       id: "boa99",

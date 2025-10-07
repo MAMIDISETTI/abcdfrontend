@@ -35,7 +35,6 @@ const UploadResults = () => {
     course: 'Course-Level Exams'
   };
 
-
   const handleDownload = (resultId) => {
     toast.success('Download started...');
   };

@@ -5,7 +5,6 @@ import moment from 'moment';
 const TraineesPopup = ({ isOpen, onClose, trainees = [], title = "Total Trainees", showAssignmentStatus = true, isLoading = false }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
-
   // Filter trainees based on search term - use useMemo to prevent infinite loops
   const filteredTrainees = useMemo(() => {
     if (!searchTerm.trim()) {

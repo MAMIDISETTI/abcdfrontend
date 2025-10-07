@@ -46,11 +46,16 @@ const TraineeMainDashboard = () => {
   const [isEditingEod, setIsEditingEod] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState({});
   const [taskStatuses, setTaskStatuses] = useState({});
+  const [checkboxStatuses, setCheckboxStatuses] = useState({}); // key: planId-taskKey-checkboxId
   const [taskRemarks, setTaskRemarks] = useState({});
   const [isSubmittingDayPlan, setIsSubmittingDayPlan] = useState(false);
   const [isUpdatingEod, setIsUpdatingEod] = useState(false);
   const [isLoadingDayPlans, setIsLoadingDayPlans] = useState(true);
-
+  const [previewTaskPlan, setPreviewTaskPlan] = useState(null);
+  const [modalTaskStatuses, setModalTaskStatuses] = useState({});
+  const [modalTaskRemarks, setModalTaskRemarks] = useState({});
+  const [modalCheckboxStatuses, setModalCheckboxStatuses] = useState({}); // key: planId-taskIndex-checkboxKey
+  const [modalCheckboxRemarks, setModalCheckboxRemarks] = useState({});
 
   // Load submitted day plans from backend
   useEffect(() => {
@@ -74,6 +79,7 @@ const TraineeMainDashboard = () => {
           // Load task statuses from database
           const statuses = {};
           const remarks = {};
+          const cbStatuses = {};
           formattedPlans.forEach(plan => {
             plan.tasks.forEach((task, index) => {
               const taskKey = `${plan.id}-${index}`;
@@ -84,9 +90,26 @@ const TraineeMainDashboard = () => {
                 remarks[taskKey] = task.remarks;
               }
             });
+            // seed checkbox statuses for today's plans
+            if (plan.checkboxes) {
+              plan.tasks.forEach((task, index) => {
+                const possibleKeys = [String(task.id), task.id, String(index), index];
+                let taskCheckboxes = null;
+                for (const key of possibleKeys) {
+                  if (plan.checkboxes[key]) { taskCheckboxes = plan.checkboxes[key]; break; }
+                }
+                if (!taskCheckboxes) return;
+                const array = Array.isArray(taskCheckboxes) ? taskCheckboxes : Object.values(taskCheckboxes);
+                array.forEach(cb => {
+                  const stateKey = `${plan.id}-${(task.id ?? index)}-${(cb.id ?? cb.checkboxId ?? cb.label)}`;
+                  cbStatuses[stateKey] = !!cb.checked;
+                });
+              });
+            }
           });
           setTaskStatuses(statuses);
           setTaskRemarks(remarks);
+          setCheckboxStatuses(cbStatuses);
         }
       } catch (error) {
         console.error('Error fetching submitted day plans:', error);
@@ -221,7 +244,6 @@ const TraineeMainDashboard = () => {
     });
   };
 
-
   // Helper function to validate time range format
   const isValidTimeRange = (timeString) => {
     if (!timeString || !timeString.trim()) return false;
@@ -251,8 +273,7 @@ const TraineeMainDashboard = () => {
   const handleEditDayPlan = (plan) => {
     // Close the view popup if it's open
     setShowViewPopup(false);
-    
-    
+
     // Ensure tasks have proper IDs for checkbox mapping
     const tasksWithIds = plan.tasks.map((task, index) => {
       // Preserve the original task ID if it exists, otherwise generate one
@@ -262,8 +283,7 @@ const TraineeMainDashboard = () => {
       };
       return taskWithId;
     });
-    
-    
+
     // Load the plan data into the form for editing
     setDayPlan({
       tasks: tasksWithIds,
@@ -286,8 +306,7 @@ const TraineeMainDashboard = () => {
           String(index),      // Task index as string (e.g., "0")
           index               // Task index as number (e.g., 0)
         ];
-        
-        
+
         let found = false;
         for (const key of possibleKeys) {
           if (plan.checkboxes[key]) {
@@ -301,8 +320,7 @@ const TraineeMainDashboard = () => {
         }
       });
     }
-    
-    
+
     setDynamicCheckboxes(mappedCheckboxes);
     
     // Set editing state
@@ -310,8 +328,7 @@ const TraineeMainDashboard = () => {
     
     // Remove the plan from submitted plans since we're editing it
     setSubmittedDayPlans(prev => prev.filter(p => p.id !== plan.id));
-    
-    
+
     // Add a small delay to check if dynamicCheckboxes state is updated
     setTimeout(() => {
     }, 100);
@@ -470,6 +487,11 @@ const TraineeMainDashboard = () => {
     }));
   };
 
+  const handleCheckboxStatusToggle = (planId, taskKey, checkboxId) => {
+    const key = `${planId}-${taskKey}-${checkboxId}`;
+    setCheckboxStatuses(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const toggleTaskExpansion = (planId, taskIndex) => {
     const key = `${planId}-${taskIndex}`;
     setExpandedTasks(prev => ({
@@ -477,7 +499,6 @@ const TraineeMainDashboard = () => {
       [key]: !prev[key]
     }));
   };
-
 
   const handleEodUpdate = async () => {
     // Validate that all tasks have status selected
@@ -531,14 +552,36 @@ const TraineeMainDashboard = () => {
         });
       });
 
+      // Prepare checkbox updates
+      const checkboxUpdates = [];
+      todayPlans.forEach(plan => {
+        plan.tasks.forEach((task, index) => {
+          const taskKeyForLookup = task.id ?? index;
+          const possibleKeys = [String(task.id), task.id, String(index), index];
+          let taskCheckboxes = null;
+          if (plan.checkboxes) {
+            for (const key of possibleKeys) {
+              if (plan.checkboxes[key]) { taskCheckboxes = plan.checkboxes[key]; break; }
+            }
+          }
+          if (!taskCheckboxes) return;
+          const array = Array.isArray(taskCheckboxes) ? taskCheckboxes : Object.values(taskCheckboxes);
+          array.forEach(cb => {
+            const stateKey = `${plan.id}-${taskKeyForLookup}-${(cb.id ?? cb.checkboxId ?? cb.label)}`;
+            const checked = !!checkboxStatuses[stateKey];
+            checkboxUpdates.push({ taskId: taskKeyForLookup, checkboxId: (cb.id ?? cb.checkboxId ?? cb.label), checked });
+          });
+        });
+      });
+
       // Send EOD update to backend
       const requestData = {
         date: moment().format('YYYY-MM-DD'),
         tasks: taskUpdates,
+        checkboxes: checkboxUpdates,
         overallRemarks: eodStatus.remarks
       };
-      
-      
+
       const response = await axiosInstance.post('/api/trainee-dayplans/eod-update', requestData);
 
       if (response.data.success !== false) {
@@ -563,7 +606,84 @@ const TraineeMainDashboard = () => {
     }
   };
 
+  // Submit EOD update from the preview modal for a single plan
+  const handleEodUpdateFromModal = async (plan) => {
+    // Validate selections
+    let hasError = false;
+    const errors = [];
+    plan.tasks.forEach((task, index) => {
+      const key = `${plan.id}-${index}`;
+      const status = modalTaskStatuses[key];
+      const remarks = modalTaskRemarks[key] || '';
+      if (!status) {
+        hasError = true;
+        errors.push(`Select status for "${task.title}"`);
+      } else if ((status === 'in_progress' || status === 'pending') && !remarks.trim()) {
+        hasError = true;
+        errors.push(`Remarks required for "${task.title}"`);
+      }
+    });
+    // Validate checkbox statuses/remarks when provided
+    const possibleTaskKeys = plan.tasks.map((_, idx) => idx);
+    possibleTaskKeys.forEach((tIdx) => {
+      const task = plan.tasks[tIdx];
+      const possibleKeys = [tIdx, String(tIdx), task.id, task.id?.toString()];
+      let group = null;
+      if (plan.checkboxes) { for (const k of possibleKeys) { if (plan.checkboxes[k]) { group = plan.checkboxes[k]; break; } } }
+      if (!group) return;
+      const arr = Array.isArray(group) ? group : Object.values(group);
+      arr.forEach((cb, i) => {
+        const cbKey = `${plan.id}-${tIdx}-${cb.id ?? cb.checkboxId ?? i}`;
+        const st = modalCheckboxStatuses[cbKey];
+        const rem = modalCheckboxRemarks[cbKey] || '';
+        if (st && (st==='in_progress' || st==='pending') && !rem.trim()) {
+          hasError = true;
+          errors.push(`Remarks required for "${cb.label}"`);
+        }
+      });
+    });
+    if (hasError) {
+      errors.forEach(e => toast.error(e));
+      return;
+    }
 
+    setIsUpdatingEod(true);
+    try {
+      // Build task updates just for this plan
+      const taskUpdates = plan.tasks.map((task, index) => ({
+        planId: plan.id,
+        taskIndex: index,
+        taskTitle: task.title,
+        status: modalTaskStatuses[`${plan.id}-${index}`],
+        remarks: modalTaskRemarks[`${plan.id}-${index}`] || '',
+        timeAllocation: task.timeAllocation
+      }));
+
+      const requestData = {
+        date: moment(plan.date).format('YYYY-MM-DD'),
+        tasks: taskUpdates,
+        overallRemarks: eodStatus.remarks || ''
+      };
+
+      await axiosInstance.post('/api/trainee-dayplans/eod-update', requestData);
+      toast.success('EOD status updated successfully');
+      setPreviewTaskPlan(null);
+      // refresh list
+      try {
+        const response = await axiosInstance.get(API_PATHS.TRAINEE_DAY_PLANS.GET_ALL);
+        if (response.data.dayPlans) {
+          const formatted = response.data.dayPlans.map(p => ({
+            id: p._id, date: p.date, tasks: p.tasks, checkboxes: p.checkboxes || {}, submittedAt: p.submittedAt, status: p.status, eodUpdate: p.eodUpdate, createdBy: p.createdBy || 'trainee'
+          }));
+          setSubmittedDayPlans(formatted);
+        }
+      } catch {}
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update EOD');
+    } finally {
+      setIsUpdatingEod(false);
+    }
+  };
 
   const renderDayPlan = () => (
     <div className="space-y-6">
@@ -618,10 +738,10 @@ const TraineeMainDashboard = () => {
                         ? 'border-red-300 bg-red-50'
                         : 'border-gray-300'
                     }`}
-                    placeholder="e.g., 9:05am-12:20pm or 9:05am–12:20pm"
+                    placeholder="e.g., 9:00am-12:00pm or 9:05am–12:20pm"
                   />
                   {task.timeAllocation && !isValidTimeRange(task.timeAllocation) && (
-                    <p className="text-xs text-red-500 mt-1">Please use format: 9:05am-12:20pm or 9:05am–12:20pm</p>
+                    <p className="text-xs text-red-500 mt-1">Please use format: 9:00am-12:00pm or 9:05am–12:20pm</p>
                   )}
                 </div>
               </div>
@@ -854,7 +974,7 @@ const TraineeMainDashboard = () => {
         
         {(() => {
           const todayPlans = submittedDayPlans.filter(plan => 
-            moment(plan.date).format('YYYY-MM-DD') === moment().format('YYYY-MM-DD') &&
+            moment(plan.date).isSame(moment(), 'day') &&
             plan.status === 'completed' && 
             plan.eodUpdate?.status !== 'approved' // Only show completed day plans that haven't been fully approved yet
           );
@@ -880,14 +1000,17 @@ const TraineeMainDashboard = () => {
                     </div>
                     </div>
                     <div className="flex items-center space-x-3">
-                      <span className="px-4 py-2 text-sm font-medium rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-                        Ready for Updates
-                    </span>
+                      <button
+                        onClick={() => setPreviewTaskPlan(plan)}
+                        className="px-4 py-2 text-sm font-medium rounded-full bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 cursor-pointer"
+                      >
+                        View
+                      </button>
                     </div>
               </div>
               
-                  {/* Tasks from Day Plan */}
-                  <div className="space-y-4">
+                  {/* Tasks from Day Plan - hidden by default; use View button to preview */}
+                  <div className="hidden">
                     {plan.tasks.map((task, index) => {
                       const taskKey = `${plan.id}-${index}`;
                       const isExpanded = expandedTasks[taskKey];
@@ -904,9 +1027,7 @@ const TraineeMainDashboard = () => {
                             onClick={() => !isEodApproved && toggleTaskExpansion(plan.id, index)}
                           >
                             <div className="flex items-center space-x-3">
-                              <div className="p-2 bg-gray-100 rounded-lg">
-                                <LuCheck className="w-4 h-4 text-gray-600" />
-                              </div>
+                              <LuCheck className="w-4 h-4 text-gray-600" />
                               <div>
                                 <h4 className="font-semibold text-gray-900">Task {index + 1}: {task.title}</h4>
                                 <p className="text-sm text-gray-500">{task.timeAllocation}</p>
@@ -930,11 +1051,7 @@ const TraineeMainDashboard = () => {
                                 </span>
                               )}
                               {!isEodApproved && (
-                                <div className="p-2 bg-gray-100 rounded-lg">
-                                  <span className="text-gray-500 text-sm">
-                                  {isExpanded ? '▼' : '▶'}
-                                </span>
-                                </div>
+                                <span className="text-gray-500 text-sm">{isExpanded ? '▼' : '▶'}</span>
                               )}
                             </div>
                           </div>
@@ -1049,6 +1166,44 @@ const TraineeMainDashboard = () => {
                             </div>
                           )}
 
+                          {/* Checkbox toggles for Additional Activities */}
+                          {(() => {
+                            const taskKeyForLookup = task.id ?? index;
+                            const possibleKeys = [String(task.id), task.id, String(index), index];
+                            let taskCheckboxes = null;
+                            if (plan.checkboxes) {
+                              for (const key of possibleKeys) {
+                                if (plan.checkboxes[key]) { taskCheckboxes = plan.checkboxes[key]; break; }
+                              }
+                            }
+                            if (!taskCheckboxes) return null;
+                            const array = Array.isArray(taskCheckboxes) ? taskCheckboxes : Object.values(taskCheckboxes);
+                            if (array.length === 0) return null;
+                            return (
+                              <div className="mt-2 space-y-1">
+                                {array.map((cb, i) => {
+                                  const cbKey = `${plan.id}-${taskKeyForLookup}-${(cb.id ?? cb.checkboxId ?? cb.label)}`;
+                                  const checked = !!checkboxStatuses[cbKey];
+                                  return (
+                                    <label key={i} className="flex items-center justify-between text-sm py-1">
+                                      <div className="flex items-center gap-2">
+                                        <input type="checkbox" className="w-4 h-4" disabled={isEodApproved}
+                                          checked={checked}
+                                          onChange={() => handleCheckboxStatusToggle(plan.id, taskKeyForLookup, (cb.id ?? cb.checkboxId ?? cb.label))}
+                                        />
+                                        <span className="text-gray-800">{cb.label || `Checklist ${i+1}`}</span>
+                                        {cb.timeAllocation && <span className="text-gray-500 text-xs">({cb.timeAllocation})</span>}
+                                      </div>
+                                      <span className={`text-xs ${checked ? 'text-green-700' : 'text-yellow-700'}`}>
+                                        {checked ? 'Completed' : 'Not Completed'}
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
+
                           {/* Show read-only status when EOD is approved */}
                           {isExpanded && isEodApproved && (
                             <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -1094,13 +1249,13 @@ const TraineeMainDashboard = () => {
       {/* EOD Update Section - Only show if there are approved tasks for today */}
       {(() => {
         const todayPlans = submittedDayPlans.filter(plan => 
-          moment(plan.date).format('YYYY-MM-DD') === moment().format('YYYY-MM-DD') &&
+          moment(plan.date).isSame(moment(), 'day') &&
           (plan.status === 'completed') // Only show EOD section if there are approved tasks
         );
         return todayPlans.length > 0;
       })() && (() => {
         const todayPlan = submittedDayPlans.find(plan => 
-          moment(plan.date).format('YYYY-MM-DD') === moment().format('YYYY-MM-DD') &&
+          moment(plan.date).isSame(moment(), 'day') &&
           plan.status === 'completed' // Only look for completed plans
         );
         const isPending = todayPlan?.status === 'pending';
@@ -1205,28 +1360,7 @@ const TraineeMainDashboard = () => {
             ) : null}
 
         <div className="mt-6 pt-4 border-t border-gray-200">
-              {/* Show submit button when there are tasks and not in EOD approved/rejected state */}
-              {!isEodApproved && !isEodRejected && (
-          <button
-            onClick={handleEodUpdate}
-            disabled={isUpdatingEod}
-            className={`w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 ${
-              isUpdatingEod 
-                ? 'opacity-75 cursor-not-allowed' 
-                : 'cursor-pointer'
-            }`}
-          >
-            {isUpdatingEod && <LuLoader className="w-4 h-4 animate-spin" />}
-            {!isUpdatingEod && <LuCheck className="w-4 h-4" />}
-            <span>
-              {isUpdatingEod 
-                ? 'Updating EOD...' 
-                : (isEodPending ? 'EOD Submitted - Pending Review' : 
-                   isEditingEod ? 'Update EOD' : 'Submit EOD Update')
-              }
-            </span>
-          </button>
-              )}
+              
         </div>
       </div>
         );
@@ -1307,9 +1441,7 @@ const TraineeMainDashboard = () => {
                           <div key={index} className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-all duration-200">
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center space-x-3">
-                                <div className="p-2 bg-gray-100 rounded-lg">
-                                  <LuCheck className="w-4 h-4 text-gray-600" />
-                                </div>
+                                <LuCheck className="w-4 h-4 text-gray-600" />
                               <div className="flex-1">
                                   <span className="font-semibold text-gray-900">{task.title}</span>
                                 <span className="text-sm text-gray-500 ml-2">({task.timeAllocation})</span>
@@ -1345,6 +1477,54 @@ const TraineeMainDashboard = () => {
                                 ></div>
                               </div>
                             </div>
+
+                          {/* Checkbox completion indicators for this task */}
+                          {(() => {
+                            // Locate checkboxes mapped to this task
+                            const possibleKeys = [
+                              String(task.id),
+                              task.id,
+                              String(index),
+                              index
+                            ];
+
+                            let taskCheckboxes = null;
+                            if (plan.checkboxes) {
+                              for (const key of possibleKeys) {
+                                if (plan.checkboxes[key]) {
+                                  taskCheckboxes = plan.checkboxes[key];
+                                  break;
+                                }
+                              }
+                            }
+
+                            if (!taskCheckboxes || Object.keys(taskCheckboxes).length === 0) {
+                              return null;
+                            }
+
+                            const checkboxArray = Array.isArray(taskCheckboxes)
+                              ? taskCheckboxes
+                              : Object.values(taskCheckboxes);
+
+                            return (
+                              <div className="mt-2 space-y-1">
+                                {checkboxArray.map((cb, i) => (
+                                  <div key={i} className="flex items-center justify-between text-sm py-1">
+                                    <div className="flex items-center gap-2">
+                                      <div className={`w-4 h-4 rounded-sm border ${cb.checked ? 'bg-green-500 border-green-600' : 'bg-white border-gray-300'}`}></div>
+                                      <span className="text-gray-800 font-medium">{cb.label || `Checklist ${i+1}`}</span>
+                                      {cb.timeAllocation && (
+                                        <span className="text-gray-500 text-xs">({cb.timeAllocation})</span>
+                                      )}
+                                    </div>
+                                    <span className={`text-xs ${cb.checked ? 'text-green-700' : 'text-yellow-700'}`}>
+                                      {cb.checked ? 'Completed' : 'Not Completed'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                             
                             {remarks && (
                               <div className="mt-2 p-2 bg-gray-50 rounded text-sm text-gray-600">
@@ -1371,12 +1551,6 @@ const TraineeMainDashboard = () => {
       </div>
     </div>
   );
-
-
-
-
-
-
 
   const tabs = [
     { id: 'day-plan', label: 'Day Plan', icon: LuCalendar },
@@ -1424,6 +1598,103 @@ const TraineeMainDashboard = () => {
         </div>
       </div>
 
+      {/* Task Status Preview Modal */}
+      {previewTaskPlan && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Day Plan - {moment(previewTaskPlan.date).format('MMM DD, YYYY')}</h3>
+              <button onClick={() => setPreviewTaskPlan(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
+            </div>
+
+            <div className="mb-4 text-sm text-gray-600">Status: <span className="font-medium">{previewTaskPlan.status}</span></div>
+
+            <div className="space-y-2">
+              {(previewTaskPlan.tasks || []).map((task, idx) => {
+                const tKey = `${previewTaskPlan.id}-${idx}`;
+                const currentStatus = modalTaskStatuses[tKey] || '';
+                const currentRemarks = modalTaskRemarks[tKey] || '';
+                return (
+                <div key={idx} className="border rounded-lg p-3">
+                  <div className="font-medium text-sm">{task.title}</div>
+                  <div className="text-xs text-gray-600">Time: {task.timeAllocation}</div>
+                  {/* Status radios */}
+                  <div className="mt-2 flex items-center gap-4">
+                    <label className="flex items-center gap-2">
+                      <input type="radio" name={`modal-status-${idx}`} value="completed" checked={currentStatus==='completed'} onChange={() => setModalTaskStatuses(prev=>({ ...prev, [tKey]: 'completed' }))} />
+                      <span className="text-sm">Completed</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="radio" name={`modal-status-${idx}`} value="in_progress" checked={currentStatus==='in_progress'} onChange={() => setModalTaskStatuses(prev=>({ ...prev, [tKey]: 'in_progress' }))} />
+                      <span className="text-sm">In Progress</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="radio" name={`modal-status-${idx}`} value="pending" checked={currentStatus==='pending'} onChange={() => setModalTaskStatuses(prev=>({ ...prev, [tKey]: 'pending' }))} />
+                      <span className="text-sm">Incomplete</span>
+                    </label>
+                  </div>
+                  {(currentStatus==='in_progress' || currentStatus==='pending') && (
+                    <div className="mt-2">
+                      <textarea rows={2} className="w-full border border-gray-300 rounded p-2 text-sm" placeholder="Enter remarks" value={currentRemarks} onChange={(e)=> setModalTaskRemarks(prev=>({ ...prev, [tKey]: e.target.value }))} />
+                      <div className="text-xs text-gray-500 mt-1">Remarks required for In Progress or Incomplete.</div>
+                    </div>
+                  )}
+                  {(() => {
+                    const possibleKeys = [idx, String(idx), task.id, task.id?.toString()];
+                    let group = null;
+                    if (previewTaskPlan.checkboxes) { for (const k of possibleKeys) { if (previewTaskPlan.checkboxes[k]) { group = previewTaskPlan.checkboxes[k]; break; } } }
+                    if (!group) return null;
+                    const arr = Array.isArray(group) ? group : Object.values(group);
+                    if (arr.length === 0) return null;
+                    return (
+                      <div className="mt-2">
+                        <div className="text-sm font-medium text-gray-700 mb-1">Additional Activities</div>
+                        {arr.map((cb, i) => {
+                          const cbKey = `${previewTaskPlan.id}-${idx}-${cb.id ?? cb.checkboxId ?? i}`;
+                          const cbStatus = modalCheckboxStatuses[cbKey] || '';
+                          const cbRemarks = modalCheckboxRemarks[cbKey] || '';
+                          return (
+                            <div key={i} className="p-2 border rounded mb-2 bg-gray-50">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium">{cb.label}</span>
+                                  {cb.timeAllocation && <span className="text-xs text-gray-500">({cb.timeAllocation})</span>}
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <label className="flex items-center gap-1 text-xs">
+                                    <input type="radio" name={`modal-cb-${idx}-${i}`} value="completed" checked={cbStatus==='completed'} onChange={()=> setModalCheckboxStatuses(prev=>({ ...prev, [cbKey]:'completed' }))} /> Completed
+                                  </label>
+                                  <label className="flex items-center gap-1 text-xs">
+                                    <input type="radio" name={`modal-cb-${idx}-${i}`} value="in_progress" checked={cbStatus==='in_progress'} onChange={()=> setModalCheckboxStatuses(prev=>({ ...prev, [cbKey]:'in_progress' }))} /> In Progress
+                                  </label>
+                                  <label className="flex items-center gap-1 text-xs">
+                                    <input type="radio" name={`modal-cb-${idx}-${i}`} value="pending" checked={cbStatus==='pending'} onChange={()=> setModalCheckboxStatuses(prev=>({ ...prev, [cbKey]:'pending' }))} /> Incomplete
+                                  </label>
+                                </div>
+                              </div>
+                              {(cbStatus==='in_progress' || cbStatus==='pending') && (
+                                <div className="mt-2">
+                                  <textarea rows={2} className="w-full border border-gray-300 rounded p-2 text-xs" placeholder="Enter remarks" value={cbRemarks} onChange={(e)=> setModalCheckboxRemarks(prev=>({ ...prev, [cbKey]: e.target.value }))} />
+                                  <div className="text-[10px] text-gray-500 mt-1">Remarks required for In Progress or Incomplete.</div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              );})}
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <button onClick={() => handleEodUpdateFromModal(previewTaskPlan)} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 cursor-pointer mr-2">Submit EOD Update</button>
+              <button onClick={() => setPreviewTaskPlan(null)} className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 cursor-pointer">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* View Day Plan Popup */}
       {showViewPopup && selectedDayPlan && (

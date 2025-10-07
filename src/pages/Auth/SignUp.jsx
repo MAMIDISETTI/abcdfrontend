@@ -58,37 +58,21 @@ const SignUp = () => {
 
     //SignUp API Call
     try {
-
       // Upload image if present
       if (profilePic) {
         const imgUploadRes = await uploadImage(profilePic);
         profileImageUrl = imgUploadRes?.imageUrl || null;
       }
 
-      const response = await axiosInstance.post(API_PATHS.AUTH.REGISTER, {
+      const requestData = {
         name: fullName,
         email,
         password,
         profileImageUrl,
-        adminInviteToken: adminInviteToken || undefined,
-        
-        // Automatically populate additional fields with defaults
-        employeeId: undefined, // Will be set by backend if needed
-        department: undefined, // Will be set by backend if needed
-        phone: undefined, // Will be set by backend if needed
-        genre: undefined, // Will be set by backend if needed
-        joiningDate: new Date().toISOString().split('T')[0], // Current date
-        qualification: undefined, // Will be set by backend if needed
-        date_of_joining: new Date().toISOString().split('T')[0], // Current date
-        candidate_name: fullName, // Use the provided name
-        phone_number: undefined, // Will be set by backend if needed
-        candidate_personal_mail_id: email, // Use the provided email
-        top_department_name_as_per_darwinbox: undefined, // Will be set by backend if needed
-        department_name_as_per_darwinbox: undefined, // Will be set by backend if needed
-        joining_status: 'active', // Set to active for new registrations
-        role_type: undefined, // Will be set by backend if needed
-        role_assign: undefined // Will be set by backend if needed
-      });
+        adminInviteToken: adminInviteToken || undefined
+      };
+
+      const response = await axiosInstance.post(API_PATHS.AUTH.REGISTER, requestData);
 
       const { role } = response.data;
 
@@ -104,9 +88,16 @@ const SignUp = () => {
       setProfilePic(null);
       setError(null);
     } catch (error){
-      if (error.response && error.response.data.message) {
-        setError(error.response.data.message);
+      console.error('=== SIGNUP ERROR ===');
+      console.error('Error object:', error);
+      console.error('Error response:', error.response);
+      console.error('Error message:', error.message);
+      
+      if (error.response && error.response.data) {
+        console.error('Error data:', error.response.data);
+        setError(error.response.data.message || 'Registration failed');
       } else {
+        console.error('No response data available');
         setError("Something went wrong. Please try again.");
       }
     } finally {
@@ -198,7 +189,7 @@ const SignUp = () => {
               {error && <p className="text-red-500 text-xs pb-2.5">{error}</p>}
 
               <button 
-                type="submit" 
+                type="submit"
                 disabled={isLoading}
                 className={`btn-primary flex items-center justify-center gap-2 ${
                   isLoading 

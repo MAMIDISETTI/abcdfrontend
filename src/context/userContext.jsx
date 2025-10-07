@@ -30,8 +30,15 @@ const UserProvider = ({ children }) => {
           setShowPasswordChangePopup(true);
         }
       } catch (error) {
-        console.error("User not authenticated", error);
-        clearUser();
+        console.error("Profile fetch error:", error);
+        
+        // Clear user if it's a 401 (unauthorized) or 403 (forbidden/deactivated) error
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          clearUser();
+        } else {
+          // Keep user logged in but show error message for other errors
+          setUser(prevUser => prevUser); // Keep current user data
+        }
       } finally {
         setLoading(false);
       }

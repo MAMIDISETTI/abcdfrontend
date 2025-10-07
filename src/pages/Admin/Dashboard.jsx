@@ -16,7 +16,6 @@ import CustomBarChart from "../../components/Charts/CustomBarChart";
 
 const COLORS = ["#8D51FF", "#00B8DB", "#7BCE00"];
 
-
 const Dashboard = () => {
   useUserAuth();
 
@@ -27,7 +26,6 @@ const Dashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [pieChartData, setPieChartData] = useState([]);
   const [barChartData, setBarChartData] = useState([]);
-
 
   // Prepare Chart Data
   const prepareChartData = (data) => {

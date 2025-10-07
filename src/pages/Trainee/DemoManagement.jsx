@@ -295,8 +295,7 @@ const DemoManagement = () => {
       const response = await axiosInstance.get(API_PATHS.ALLOCATION.GET_ALL, {
         params: { traineeId: traineeId }
       });
-      
-      
+
       if (response.data.success && response.data.allocations && response.data.allocations.length > 0) {
         // Get the latest allocation (most recent)
         const latestAllocation = response.data.allocations[0]; // Assuming they're sorted by date desc

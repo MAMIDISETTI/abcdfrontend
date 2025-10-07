@@ -1,9 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import { HiOutlineMenu, HiOutlineX } from "react-icons/hi";
 import SideMenu from "./SideMenu";
+import NotificationBell from "../NotificationBell";
+import { UserContext } from "../../context/userContext";
 
 const Navbar = ({ activeMenu }) => {
   const [openSideMenu, setOpenSideMenu] = useState(false);
+  const { user } = useContext(UserContext);
 
   return (
     <div className="flex gap-5 bg-white border boredr-b border-gray-200/50 backdrop-blur-[2px] py-4 px-7 sticky top-0 z-30">
@@ -21,6 +24,13 @@ const Navbar = ({ activeMenu }) => {
       </button>
 
       <h2 className="text-lg font-medium text-black">Task Manager</h2>
+
+      {/* Notification Bell - Show for all roles except admin */}
+      {user && user.role !== 'admin' && (
+        <div className="ml-auto">
+          <NotificationBell />
+        </div>
+      )}
 
       {openSideMenu && (
         <div className="fixed top-[61px] -ml-4 bg-white">

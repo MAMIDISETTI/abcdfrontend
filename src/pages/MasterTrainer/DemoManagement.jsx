@@ -48,6 +48,7 @@ const MasterTrainerDemoManagement = () => {
     recommendations: ''
   });
   const [trainerApprovedDemos, setTrainerApprovedDemos] = useState([]);
+  const [finalReviewDemos, setFinalReviewDemos] = useState([]);
   const [showFinalReviewModal, setShowFinalReviewModal] = useState(false);
   const [selectedFinalReviewDemo, setSelectedFinalReviewDemo] = useState(null);
   const [finalReviewData, setFinalReviewData] = useState({
@@ -57,6 +58,9 @@ const MasterTrainerDemoManagement = () => {
   });
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [selectedDemo, setSelectedDemo] = useState(null);
+  const [showDemoDetailsModal, setShowDemoDetailsModal] = useState(false);
+  const [selectedDemoDetails, setSelectedDemoDetails] = useState(null);
+  const [isSubmittingFinalReview, setIsSubmittingFinalReview] = useState(false);
 
   useEffect(() => {
     // fetchOfflineRequests(); // Disabled - focusing on online demos
@@ -66,6 +70,7 @@ const MasterTrainerDemoManagement = () => {
 
   const fetchOfflineRequests = async () => {
     try {
+      setIsSubmittingFinalReview(true);
       const response = await axiosInstance.get(API_PATHS.DEMO.OFFLINE_REQUESTS);
       if (response.data.success) {
         setOfflineRequests(response.data.requests);
@@ -114,7 +119,7 @@ const MasterTrainerDemoManagement = () => {
         ]);
       }
     } catch (error) {
-      console.error('Error fetching offline requests:', error);
+      
       setOfflineRequests([]);
     }
   };
@@ -122,11 +127,52 @@ const MasterTrainerDemoManagement = () => {
   const fetchDemoSessions = async () => {
     try {
       const response = await axiosInstance.get(API_PATHS.DEMO.GET_ALL);
-      if (response.data.success) {
-        setDemoSessions(response.data.demos);
+      if (response.data.success && response.data.demos) {
+        
+        // Process demos to include offline demos
+        const allDemos = response.data.demos.map(demo => {
+          // If it's an offline demo, format it properly
+          if (demo.type === 'offline_demo') {
+            const formattedDemo = {
+              ...demo,
+              traineeName: demo.traineeName || 'Unknown Trainee',
+              traineeId: demo.traineeId || demo.author_id || demo.id,
+              courseTag: 'Offline Demo',
+              status: demo.status || 'pending_approval',
+              createdAt: demo.createdAt // Keep original createdAt, don't override
+            };
+            return formattedDemo;
+          }
+          return demo;
+        });
+        
+        // Separate demos based on status
+        const approvedDemos = allDemos.filter(demo => 
+          (demo.type === 'offline_demo' && demo.status === 'approved') ||
+          (demo.type !== 'offline_demo' && demo.masterTrainerStatus === 'approved')
+        ).map(demo => ({
+          ...demo,
+          // Normalize offline demo fields for All Demos list
+          traineeName: demo.traineeName || demo.name || 'Unknown Trainee',
+          traineeId: demo.traineeId || demo.author_id || demo.id,
+          courseTag: demo.type === 'offline_demo' ? 'Offline Demo' : (demo.courseTag || 'N/A'),
+          createdAt: demo.createdAt || demo.uploadedAt || null
+        }));
+        
+        // Pending for master trainer review includes:
+        // - Offline demos pending_approval
+        // - Online demos where trainer approved (trainerStatus === 'approved') but master trainer hasn't
+        const pendingDemos = allDemos.filter(demo => {
+          const isOfflinePending = demo.type === 'offline_demo' && demo.status === 'pending_approval';
+          const isTrainerApprovedOnline = (demo.type !== 'offline_demo') && (demo.trainerStatus === 'approved') && (demo.masterTrainerStatus !== 'approved');
+          return isOfflinePending || isTrainerApprovedOnline;
+        });
+        
+        setDemoSessions(approvedDemos); // All Demos tab shows approved demos
+        setFinalReviewDemos(pendingDemos); // Final Reviews tab shows items needing master trainer action
       } else {
         // Mock data for development
-        setDemoSessions([
+        const mockDemos = [
           {
             id: '1',
             traineeName: 'Emily Davis',
@@ -135,7 +181,7 @@ const MasterTrainerDemoManagement = () => {
             sessionDate: new Date().toISOString(),
             duration: '60 minutes',
             location: 'Conference Room A',
-            status: 'completed',
+            status: 'approved',
             recordingUrl: '/recordings/demo1.mp4',
             feedback: 'Excellent presentation skills and technical knowledge',
             rating: 4.5,
@@ -149,16 +195,64 @@ const MasterTrainerDemoManagement = () => {
             sessionDate: new Date(Date.now() - 86400000).toISOString(),
             duration: '45 minutes',
             location: 'Training Hall B',
-            status: 'completed',
+            status: 'approved',
             recordingUrl: '/recordings/demo2.mp4',
             feedback: 'Good understanding of backend concepts',
             rating: 4.0,
             reviewedAt: new Date(Date.now() - 86400000).toISOString()
+          },
+          {
+            id: '3',
+            traineeName: 'Priya Sharma',
+            traineeId: 'dadfdf33-e6cb-405a-afd3-34473fce32be',
+            courseTag: 'Offline Demo',
+            type: 'offline_demo',
+            status: 'pending_approval',
+            createdAt: '2024-01-10T10:00:00Z',
+            feedback: 'Good demonstration of offline concepts with clear explanations.',
+            evaluationData: {
+              demoTitle: 'React Hooks Demo',
+              takenBy: 'Priya Sharma',
+              date: '2024-01-10',
+              track: 'Frontend Development',
+              topic: 'React Hooks',
+              slideUsage: 'Excellent - Fully Followed',
+              referenceVideoWatched: 'Yes',
+              contentFamiliarity: 'Excellent - Confident with the concepts',
+              timeManagement: 'Excellent - On Time',
+              voiceModulation: 'Excellent - Loud and clear',
+              bodyLanguage: 'Excellent – Confident, open posture, great eye contact',
+              languageClarity: 'Excellent – Clear, fluent, engaging language',
+              paceOfDelivery: 'Excellent – Well-paced, easy to follow',
+              boardUsage: 'Good – Used wherever required',
+              handsOnCoding: 'Excellent – Explained step by step',
+              classEngagement: 'Excellent – Actively involves students',
+              usageOfExample: 'Excellent – Real-world examples used effectively',
+              keyConceptsCovered: 'Excellent - All concepts covered',
+              accuracyOfInformation: 'Excellent - Perfectly aligned',
+              flowOfContent: 'Excellent – Seamless transitions, logical flow',
+              overallRating: '5',
+              reattemptNeeded: false
+            }
           }
-        ]);
+        ];
+        
+        // Separate mock demos based on status
+        const approvedDemos = mockDemos.filter(demo => 
+          demo.status === 'approved' || 
+          (demo.type === 'offline_demo' && demo.status === 'approved')
+        );
+        
+        const pendingDemos = mockDemos.filter(demo => 
+          demo.status === 'pending_approval' || 
+          (demo.type === 'offline_demo' && demo.status === 'pending_approval')
+        );
+        
+        setDemoSessions(approvedDemos); // All Demos tab shows approved demos
+        setFinalReviewDemos(pendingDemos); // Final Reviews tab shows pending demos
       }
     } catch (error) {
-      console.error('Error fetching demo sessions:', error);
+      
       setDemoSessions([]);
     }
   };
@@ -190,7 +284,7 @@ const MasterTrainerDemoManagement = () => {
                 demo.reviewedByName = trainerResponse.data.user.name;
               }
             } catch (error) {
-              console.error('Error fetching trainer name:', error);
+              
               demo.reviewedByName = 'Unknown Trainer';
             }
           }
@@ -202,7 +296,7 @@ const MasterTrainerDemoManagement = () => {
         setTrainerApprovedDemos([]);
       }
     } catch (error) {
-      console.error('Error fetching trainer-approved demos:', error);
+      
       setTrainerApprovedDemos([]);
     }
   };
@@ -219,7 +313,7 @@ const MasterTrainerDemoManagement = () => {
         setSelectedRequest(null);
       }
     } catch (error) {
-      console.error(`Error ${action}ing request:`, error);
+      
     }
   };
 
@@ -236,7 +330,7 @@ const MasterTrainerDemoManagement = () => {
         fetchDemoSessions();
       }
     } catch (error) {
-      console.error('Error submitting feedback:', error);
+      
     }
   };
 
@@ -275,6 +369,59 @@ const MasterTrainerDemoManagement = () => {
     setSelectedDemo(null);
   };
 
+  // Demo details functions
+  const openDemoDetailsModal = (demo) => {
+    // Normalize fields so the modal shows correct type and details
+    const normalized = {
+      ...demo,
+      type: demo.type || (demo.courseTag === 'Offline Demo' ? 'offline_demo' : 'online_demo'),
+      courseTag: demo.courseTag || (demo.type === 'offline_demo' ? 'Offline Demo' : demo.courseTag),
+      traineeId: demo.traineeId || demo.author_id || demo.id,
+      uploadedAt: demo.uploadedAt || demo.createdAt,
+      demoTitle: demo.demoTitle || demo.title || 'Untitled Demo',
+      description: demo.description || demo.feedback || 'No description available',
+      trainerFeedback: demo.feedback || 'No feedback provided',
+      rating: demo.rating || 0,
+      reviewStatus: demo.status || (demo.trainerStatus === 'approved' ? 'under_review' : 'pending')
+    };
+    setSelectedDemoDetails(normalized);
+    setShowDemoDetailsModal(true);
+  };
+
+  const closeDemoDetailsModal = () => {
+    setShowDemoDetailsModal(false);
+    setSelectedDemoDetails(null);
+  };
+
+  // Handle demo approval
+  const handleDemoApproval = async (traineeId, demoIndex, action) => {
+    try {
+      if (!traineeId || demoIndex === undefined) {
+        toast.error('Trainee ID or demo index not found. Cannot process approval.');
+        return;
+      }
+
+      const response = await axiosInstance.put(`/api/demos/offline/${traineeId}/${demoIndex}`, {
+        action: action, // 'approve' or 'reject'
+        reviewedBy: user?.author_id || user?.id,
+        reviewedAt: new Date().toISOString()
+      });
+
+      if (response.data.success) {
+        toast.success(`Demo ${action === 'approve' ? 'approved' : 'rejected'} successfully!`);
+        closeDemoDetailsModal();
+        // Refresh both tabs
+        fetchDemoSessions();
+        fetchTrainerApprovedDemos();
+      } else {
+        throw new Error(response.data.message || `Failed to ${action} demo`);
+      }
+    } catch (error) {
+      
+      toast.error(`Failed to ${action} demo. Please try again.`);
+    }
+  };
+
   const handleFinalReviewSubmit = async () => {
     if (!selectedFinalReviewDemo) return;
 
@@ -289,8 +436,6 @@ const MasterTrainerDemoManagement = () => {
     }
 
     try {
-
-      // Make API call to update demo with master trainer review
       const reviewPayload = {
         action: finalReviewData.action,
         rating: finalReviewData.rating,
@@ -299,10 +444,25 @@ const MasterTrainerDemoManagement = () => {
         reviewedAt: new Date().toISOString()
       };
 
-      const response = await axiosInstance.put(
-        `${API_PATHS.DEMO.UPDATE(selectedFinalReviewDemo.demoId || selectedFinalReviewDemo.id)}/master-review`,
-        reviewPayload
-      );
+      let response;
+      if (selectedFinalReviewDemo.type === 'offline_demo') {
+        // Use offline demo endpoint which identifies by traineeId and demoIndex
+        const traineeId = selectedFinalReviewDemo.traineeId || selectedFinalReviewDemo.author_id;
+        const index = selectedFinalReviewDemo.demoIndex;
+        if (!traineeId || index === undefined) {
+          toast.error('Missing trainee ID or demo index for offline demo.');
+          return;
+        }
+        response = await axiosInstance.put(`/api/demos/offline/${traineeId}/${index}`, reviewPayload);
+      } else {
+        // Online demo path uses demo id and master-review
+        const demoId = selectedFinalReviewDemo.id || selectedFinalReviewDemo.demoId;
+        if (!demoId) {
+          toast.error('Missing demo id.');
+          return;
+        }
+        response = await axiosInstance.put(`${API_PATHS.DEMO.UPDATE(demoId)}/master-review`, reviewPayload);
+      }
 
       if (response.data.success) {
         
@@ -318,8 +478,10 @@ const MasterTrainerDemoManagement = () => {
         throw new Error(response.data.message || 'Failed to submit final review');
       }
     } catch (error) {
-      console.error('Error submitting final review:', error);
+      
       toast.error('Failed to submit final review. Please try again.');
+    } finally {
+      setIsSubmittingFinalReview(false);
     }
   };
 
@@ -376,7 +538,7 @@ const MasterTrainerDemoManagement = () => {
         ]);
       }
     } catch (error) {
-      console.error('Error fetching campus allocations:', error);
+      
       // Mock data for development
       setCampusAllocations([
         {
@@ -428,7 +590,7 @@ const MasterTrainerDemoManagement = () => {
         ]);
       }
     } catch (error) {
-      console.error('Error fetching observations:', error);
+      
       // Mock data for development
       setObservations([
         {
@@ -460,7 +622,7 @@ const MasterTrainerDemoManagement = () => {
         fetchOfflineRequests();
       }
     } catch (error) {
-      console.error('Error approving request:', error);
+      
       toast.error('Failed to approve request. Please try again.');
     }
   };
@@ -479,7 +641,7 @@ const MasterTrainerDemoManagement = () => {
         fetchOfflineRequests();
       }
     } catch (error) {
-      console.error('Error rejecting request:', error);
+      
       toast.error('Failed to reject request. Please try again.');
     }
   };
@@ -512,7 +674,7 @@ const MasterTrainerDemoManagement = () => {
         fetchObservations();
       }
     } catch (error) {
-      console.error('Error submitting observation:', error);
+      
       toast.error('Failed to record observation. Please try again.');
     }
   };
@@ -544,7 +706,7 @@ const MasterTrainerDemoManagement = () => {
         fetchCampusAllocations();
       }
     } catch (error) {
-      console.error('Error creating campus allocation:', error);
+      
       toast.error('Failed to create campus allocation. Please try again.');
     }
   };
@@ -581,7 +743,7 @@ const MasterTrainerDemoManagement = () => {
         fetchDemoSessions();
       }
     } catch (error) {
-      console.error('Error submitting feedback:', error);
+      
       toast.error('Failed to submit feedback. Please try again.');
     }
   };
@@ -697,40 +859,105 @@ const MasterTrainerDemoManagement = () => {
 
                 {demoSessions.length > 0 ? (
                   <div className="space-y-4">
-                    {demoSessions.map((session) => (
-                      <div key={session.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                    {demoSessions.map((session, index) => (
+                      <div 
+                        key={session.id || session.demoId || `demo-${index}`} 
+                        onClick={() => openDemoDetailsModal(session)}
+                        className="bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-all duration-200"
+                      >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-lg font-medium text-gray-900">{session.traineeName}</h3>
-                              <span className="text-sm text-gray-500">({session.traineeId})</span>
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(session.status)}`}>
-                                {session.status}
+                              <h3 className="text-lg font-medium text-gray-900">
+                                {session.traineeName || session.name || 'Unknown Trainee'}
+                              </h3>
+                              <span className="text-sm text-gray-500">
+                                ({session.traineeId || session.author_id || session.id || 'N/A'})
+                              </span>
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                session.type === 'offline_demo' ? 
+                                  (session.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
+                                   session.status === 'approved' ? 'bg-green-100 text-green-800' :
+                                   session.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                   'bg-gray-100 text-gray-800') :
+                                getStatusColor(session.status)
+                              }`}>
+                                {session.type === 'offline_demo' ? 
+                                  (session.status === 'pending_approval' ? 'Pending Approval' :
+                                   session.status === 'approved' ? 'Approved' :
+                                   session.status === 'rejected' ? 'Rejected' :
+                                   'Unknown') :
+                                  session.status
+                                }
                               </span>
                             </div>
-                            <p className="text-sm text-gray-600 mb-2">{session.courseTag}</p>
+                            <p className="text-sm text-gray-600 mb-2">
+                              {session.type === 'offline_demo' ? 'Offline Demo' : (session.courseTag || 'N/A')}
+                            </p>
                             <div className="flex items-center gap-4 text-sm text-gray-500">
                               <span className="flex items-center gap-1">
                                 <LuCalendar className="w-4 h-4" />
-                                {session.uploadedAt ? new Date(session.uploadedAt).toLocaleDateString() : 'N/A'}
+                                {session.type === 'offline_demo' ? 
+                                  (() => {
+                                    // Try multiple possible date fields
+                                    const possibleDates = [
+                                      session.createdAt,
+                                      session.created_at,
+                                      session.date,
+                                      session.demoDate,
+                                      session.submittedAt
+                                    ];
+                                    
+                                    for (const dateValue of possibleDates) {
+                                      if (dateValue) {
+                                        try {
+                                          const date = new Date(dateValue);
+                                          if (!isNaN(date.getTime())) {
+                                            return date.toLocaleDateString();
+                                          }
+                                        } catch (e) {
+                                          }
+                                      }
+                                    }
+                                    
+                                    // Show a default date for offline demos if no date is available
+                                    return 'Offline Demo';
+                                  })() :
+                                  (session.uploadedAt ? new Date(session.uploadedAt).toLocaleDateString() : 'N/A')
+                                }
                               </span>
                               <span className="flex items-center gap-1">
                                 <LuClock className="w-4 h-4" />
-                                {session.duration || 'N/A'}
+                                {session.type === 'offline_demo' ? 
+                                  (session.createdAt ? 
+                                    (() => {
+                                      try {
+                                        const date = new Date(session.createdAt);
+                                        return date.toLocaleTimeString();
+                                      } catch (e) {
+                                        return 'Offline Demo';
+                                      }
+                                    })() : 'Offline Demo') : 
+                                  (session.duration || 'N/A')
+                                }
                               </span>
                               <span className="flex items-center gap-1">
                                 <LuMapPin className="w-4 h-4" />
-                                {session.location || 'N/A'}
+                                {session.type === 'offline_demo' ? 'Offline' : (session.location || 'N/A')}
                               </span>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button className="px-3 py-1 text-blue-600 hover:text-blue-800 text-sm font-medium cursor-pointer">
-                              <LuDownload className="w-4 h-4" />
-                            </button>
-                            <button className="px-3 py-1 text-green-600 hover:text-green-800 text-sm font-medium cursor-pointer">
-                              <LuStar className="w-4 h-4" />
-                            </button>
+                            {session.type !== 'offline_demo' && (
+                              <>
+                                <button className="px-3 py-1 text-blue-600 hover:text-blue-800 text-sm font-medium cursor-pointer">
+                                  <LuDownload className="w-4 h-4" />
+                                </button>
+                                <button className="px-3 py-1 text-green-600 hover:text-green-800 text-sm font-medium cursor-pointer">
+                                  <LuStar className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -752,8 +979,8 @@ const MasterTrainerDemoManagement = () => {
                 
                 {demoSessions.filter(s => s.status === 'completed').length > 0 ? (
                   <div className="space-y-4">
-                    {demoSessions.filter(s => s.status === 'completed').map((session) => (
-                      <div key={session.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                    {demoSessions.filter(s => s.status === 'completed').map((session, index) => (
+                      <div key={session.id || session.demoId || `feedback-${index}`} className="bg-white border border-gray-200 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-4">
                           <div>
                             <h3 className="text-lg font-medium text-gray-900">{session.traineeName}</h3>
@@ -811,43 +1038,69 @@ const MasterTrainerDemoManagement = () => {
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-bold text-gray-900">Final Reviews</h2>
                   <p className="text-sm text-gray-500">
-                    Review demos approved by trainers
+                    Review demos pending approval
                   </p>
                 </div>
 
-                {trainerApprovedDemos.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {trainerApprovedDemos.map((demo) => (
-                      <div key={demo.id} className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-6">
+                {finalReviewDemos.length > 0 ? (
+                  <div className="space-y-4">
+                    {finalReviewDemos.map((session, index) => (
+                      <div key={session.id || session.demoId || `final-review-${index}`} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-200">
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center space-x-3">
                             <div className="p-2 bg-blue-100 rounded-lg">
                               <LuVideo className="w-5 h-5 text-blue-600" />
                             </div>
                             <div>
-                              <h3 className="font-semibold text-gray-900 text-lg">{demo.title}</h3>
-                              <p className="text-sm text-gray-600">by {demo.traineeName}</p>
-                              <p className="text-xs text-gray-500">{demo.courseTag}</p>
+                              <h3 className="font-semibold text-gray-900 text-lg">
+                                {session.traineeName || session.name || 'Unknown Trainee'}
+                              </h3>
+                              <p className="text-sm text-gray-600">
+                                ({session.traineeId || session.author_id || session.id || 'N/A'})
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {session.type === 'offline_demo' ? 'Offline Demo' : (session.courseTag || 'N/A')}
+                              </p>
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
-                              Trainer Approved
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              session.type === 'offline_demo' ? 
+                                (session.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
+                                 session.status === 'approved' ? 'bg-green-100 text-green-800' :
+                                 session.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                 'bg-gray-100 text-gray-800') :
+                              'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {session.type === 'offline_demo' ? 
+                                (session.status === 'pending_approval' ? 'Pending Approval' :
+                                 session.status === 'approved' ? 'Approved' :
+                                 session.status === 'rejected' ? 'Rejected' :
+                                 'Unknown') :
+                                'Trainer Approved'
+                              }
                             </span>
                           </div>
                         </div>
                         
-                        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+                        <div className="bg-gray-50 rounded-lg p-4 mb-4">
                           <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-medium text-gray-900">Trainer Feedback:</h4>
-                            {demo.reviewedByName && (
+                            <h4 className="font-medium text-gray-900">
+                              {session.type === 'offline_demo' ? 'Feedback:' : 'Trainer Feedback:'}
+                            </h4>
+                            {session.reviewedByName && (
                               <span className="text-sm text-gray-600">
-                                by <span className="font-medium text-blue-600">{demo.reviewedByName}</span>
+                                by <span className="font-medium text-blue-600">{session.reviewedByName}</span>
                               </span>
                             )}
                           </div>
-                          <p className="text-gray-700 text-sm mb-2">{demo.feedback}</p>
-                          {demo.rating > 0 && (
+                          <p className="text-gray-700 text-sm mb-2">
+                            {session.type === 'offline_demo' ? 
+                              (session.feedback || 'No feedback provided') : 
+                              (session.feedback || 'No feedback provided')
+                            }
+                          </p>
+                          {session.rating > 0 && (
                             <div className="flex items-center space-x-1">
                               <span className="text-sm text-gray-600">Rating:</span>
                               <div className="flex space-x-1">
@@ -855,7 +1108,7 @@ const MasterTrainerDemoManagement = () => {
                                   <LuStar
                                     key={star}
                                     className={`w-4 h-4 ${
-                                      star <= demo.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'
+                                      star <= session.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'
                                     }`}
                                   />
                                 ))}
@@ -866,17 +1119,25 @@ const MasterTrainerDemoManagement = () => {
 
                         <div className="flex space-x-2">
                           <button
-                            onClick={() => openFinalReviewModal(demo)}
-                            className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                            onClick={() => openFinalReviewModal(session)}
+                            className="cursor-pointer px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
                           >
-                            Review
+                            Approve / Reject
                           </button>
                           <button
-                            onClick={() => openVideoModal(demo)}
-                            className="px-3 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+                            onClick={() => openDemoDetailsModal(session)}
+                            className="cursor-pointer flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
                           >
-                            View
+                            View Details
                           </button>
+                          {session.type !== 'offline_demo' && (
+                            <button
+                              onClick={() => openVideoModal(session)}
+                              className="px-3 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+                            >
+                              View Video
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -886,9 +1147,9 @@ const MasterTrainerDemoManagement = () => {
                     <div className="p-4 bg-gray-100 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center">
                       <LuCheck className="w-10 h-10 text-gray-400" />
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No demos pending final review</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No demos pending approval</h3>
                     <p className="text-gray-500 text-sm max-w-md mx-auto">
-                      All trainer-approved demos have been reviewed or there are no demos awaiting your review.
+                      All demos have been reviewed or there are no demos awaiting your approval.
                     </p>
                   </div>
                 )}
@@ -1464,13 +1725,18 @@ const MasterTrainerDemoManagement = () => {
                     </button>
                     <button
                       onClick={handleFinalReviewSubmit}
+                      disabled={isSubmittingFinalReview}
                       className={`px-4 py-2 text-white rounded-lg transition-colors ${
+                        isSubmittingFinalReview ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'
+                      } ${
                         finalReviewData.action === 'approve'
                           ? 'bg-green-600 hover:bg-green-700'
                           : 'bg-red-600 hover:bg-red-700'
                       }`}
                     >
-                      {finalReviewData.action === 'approve' ? 'Approve Demo' : 'Reject Demo'}
+                      {isSubmittingFinalReview
+                        ? (finalReviewData.action === 'approve' ? 'Approving...' : 'Rejecting...')
+                        : (finalReviewData.action === 'approve' ? 'Approve Demo' : 'Reject Demo')}
                     </button>
                   </div>
                 </div>
@@ -1519,6 +1785,329 @@ const MasterTrainerDemoManagement = () => {
                       </div>
                     )}
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Demo Details Modal */}
+        {showDemoDetailsModal && selectedDemoDetails && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl max-w-[95vw] w-full mx-4 max-h-[95vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-2xl font-bold text-gray-900">
+                    {selectedDemoDetails.type === 'offline_demo' ? 'Offline Demo Details' : 'Demo Details'}
+                  </h3>
+                  <button
+                    onClick={closeDemoDetailsModal}
+                    className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                  >
+                    <LuX className="w-7 h-7" />
+                  </button>
+                </div>
+
+                <div className="space-y-4 overflow-x-auto">
+                  {/* Section 1: Demo and Trainee Information */}
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="bg-blue-600 text-white px-4 py-2">
+                      <div className="grid grid-cols-8 gap-2 text-sm font-medium">
+                        <div className="min-w-[100px]">Demo Type</div>
+                        <div className="min-w-[120px]">Trainee Name</div>
+                        <div className="min-w-[200px]">Trainee ID</div>
+                        <div className="min-w-[120px]">Course Track</div>
+                        <div className="min-w-[120px]">Demo Status</div>
+                        <div className="min-w-[100px]">Created Date</div>
+                        <div className="min-w-[100px]">Last Updated</div>
+                        <div className="min-w-[80px]">Duration</div>
+                      </div>
+                    </div>
+                    <div className="bg-white px-4 py-3">
+                      <div className="grid grid-cols-8 gap-2 text-sm">
+                        <div className="font-medium min-w-[100px] break-words">
+                          {selectedDemoDetails.type === 'offline_demo' ? 'Offline Demo' : 'Online Demo'}
+                        </div>
+                        <div className="min-w-[120px] break-words">
+                          {selectedDemoDetails.traineeName || selectedDemoDetails.name || 'Unknown Trainee'}
+                      </div>
+                        <div className="min-w-[200px] break-all text-xs">
+                          {selectedDemoDetails.traineeId || selectedDemoDetails.author_id || selectedDemoDetails.id || 'N/A'}
+                      </div>
+                        <div className="min-w-[120px] break-words">
+                          {selectedDemoDetails.courseTag || selectedDemoDetails.track || 'Not specified'}
+                      </div>
+                        <div className="min-w-[120px]">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${
+                          selectedDemoDetails.type === 'offline_demo' ? 
+                            (selectedDemoDetails.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
+                             selectedDemoDetails.status === 'approved' ? 'bg-green-100 text-green-800' :
+                             selectedDemoDetails.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                             'bg-gray-100 text-gray-800') :
+                            'bg-blue-100 text-blue-800'
+                        }`}>
+                          {selectedDemoDetails.type === 'offline_demo' ? 
+                            (selectedDemoDetails.status === 'pending_approval' ? 'Pending Approval' :
+                             selectedDemoDetails.status === 'approved' ? 'Approved' :
+                             selectedDemoDetails.status === 'rejected' ? 'Rejected' :
+                             'Unknown') :
+                              selectedDemoDetails.status || 'Active'
+                          }
+                        </span>
+                      </div>
+                        <div className="min-w-[100px] break-words">
+                          {selectedDemoDetails.type === 'offline_demo' ? 
+                            (selectedDemoDetails.createdAt ? new Date(selectedDemoDetails.createdAt).toLocaleDateString() : 'N/A') :
+                            (selectedDemoDetails.uploadedAt ? new Date(selectedDemoDetails.uploadedAt).toLocaleDateString() : 'N/A')
+                          }
+                      </div>
+                        <div className="min-w-[100px] break-words">
+                          {selectedDemoDetails.updatedAt ? new Date(selectedDemoDetails.updatedAt).toLocaleDateString() : 'N/A'}
+                        </div>
+                        <div className="min-w-[80px] break-words">
+                          {selectedDemoDetails.duration || 'N/A'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 2: Content and Description */}
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="bg-blue-600 text-white px-4 py-2">
+                      <div className="grid grid-cols-6 gap-2 text-sm font-medium">
+                        <div className="min-w-[150px]">Demo Title</div>
+                        <div className="min-w-[120px]">Topic</div>
+                        <div className="min-w-[200px]">Description</div>
+                        <div className="min-w-[250px]">Trainer Feedback</div>
+                        <div className="min-w-[100px]">Rating</div>
+                        <div className="min-w-[120px]">Review Status</div>
+                      </div>
+                    </div>
+                    <div className="bg-white px-4 py-3">
+                      <div className="grid grid-cols-6 gap-2 text-sm">
+                        <div className="font-medium min-w-[150px] break-words">
+                          {selectedDemoDetails.title || selectedDemoDetails.demoTitle || 'Untitled Demo'}
+                        </div>
+                        <div className="min-w-[120px] break-words">
+                          {selectedDemoDetails.topic || 'Not specified'}
+                        </div>
+                        <div className="min-w-[200px] break-words">
+                          {selectedDemoDetails.description || 'No description available'}
+                        </div>
+                        <div className="min-w-[250px] break-words">
+                          {selectedDemoDetails.feedback || selectedDemoDetails.trainerFeedback || 'No feedback provided'}
+                        </div>
+                        <div className="min-w-[100px]">
+                          {selectedDemoDetails.rating && selectedDemoDetails.rating > 0 ? (
+                            <div className="flex items-center space-x-1">
+                              <span className="font-medium">{selectedDemoDetails.rating}/5</span>
+                              <div className="flex space-x-1">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <LuStar
+                                    key={star}
+                                    className={`w-3 h-3 ${
+                                      star <= selectedDemoDetails.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-500">Not rated</span>
+                          )}
+                        </div>
+                        <div className="min-w-[120px]">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${
+                            selectedDemoDetails.trainerStatus === 'approved' ? 'bg-green-100 text-green-800' :
+                            selectedDemoDetails.trainerStatus === 'rejected' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {selectedDemoDetails.trainerStatus === 'approved' ? 'Approved' :
+                             selectedDemoDetails.trainerStatus === 'rejected' ? 'Rejected' :
+                             'Under Review'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 3: Evaluation Details (for offline demos) */}
+                  {selectedDemoDetails.type === 'offline_demo' && selectedDemoDetails.evaluationData && (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-blue-600 text-white px-4 py-2">
+                      <div className="grid grid-cols-8 gap-2 text-sm font-medium">
+                        <div className="min-w-[130px]">Slide Usage</div>
+                        <div className="min-w-[130px]">Reference Video</div>
+                        <div className="min-w-[150px]">Content Familiarity</div>
+                        <div className="min-w-[130px]">Time Management</div>
+                        <div className="min-w-[130px]">Voice Modulation</div>
+                        <div className="min-w-[130px]">Body Language</div>
+                        <div className="min-w-[130px]">Language Clarity</div>
+                        <div className="min-w-[150px]">Pace of Delivery</div>
+                          </div>
+                        </div>
+                      <div className="bg-white px-4 py-3">
+                        <div className="grid grid-cols-8 gap-2 text-sm">
+                          <div className="min-w-[130px] break-words">
+                            {selectedDemoDetails.evaluationData.slideUsage || 'Not specified'}
+                          </div>
+                          <div className="min-w-[130px] break-words">
+                            {selectedDemoDetails.evaluationData.referenceVideoWatched || 'Not specified'}
+                        </div>
+                          <div className="min-w-[150px] break-words">
+                            {selectedDemoDetails.evaluationData.contentFamiliarity || 'Not specified'}
+                          </div>
+                          <div className="min-w-[130px] break-words">
+                            {selectedDemoDetails.evaluationData.timeManagement || 'Not specified'}
+                        </div>
+                          <div className="min-w-[130px] break-words">
+                            {selectedDemoDetails.evaluationData.voiceModulation || 'Not specified'}
+                          </div>
+                          <div className="min-w-[130px] break-words">
+                            {selectedDemoDetails.evaluationData.bodyLanguage || 'Not specified'}
+                        </div>
+                          <div className="min-w-[130px] break-words">
+                            {selectedDemoDetails.evaluationData.languageClarity || 'Not specified'}
+                          </div>
+                          <div className="min-w-[150px] break-words">
+                            {selectedDemoDetails.evaluationData.paceOfDelivery || 'Not specified'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Section 4: Technical Assessment */}
+                  {selectedDemoDetails.type === 'offline_demo' && selectedDemoDetails.evaluationData && (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-blue-600 text-white px-4 py-2">
+                      <div className="grid grid-cols-8 gap-2 text-sm font-medium">
+                        <div className="min-w-[130px]">Board Usage</div>
+                        <div className="min-w-[140px]">Hands-On Coding</div>
+                        <div className="min-w-[140px]">Class Engagement</div>
+                        <div className="min-w-[150px]">Usage of Examples</div>
+                        <div className="min-w-[130px]">Key Concepts</div>
+                        <div className="min-w-[150px]">Information Accuracy</div>
+                        <div className="min-w-[130px]">Content Flow</div>
+                        <div className="min-w-[130px]">Overall Rating</div>
+                          </div>
+                        </div>
+                      <div className="bg-white px-4 py-3">
+                        <div className="grid grid-cols-8 gap-2 text-sm">
+                          <div className="min-w-[130px] break-words">
+                            {selectedDemoDetails.evaluationData.boardUsage || 'Not specified'}
+                          </div>
+                          <div className="min-w-[140px] break-words">
+                            {selectedDemoDetails.evaluationData.handsOnCoding || 'Not specified'}
+                          </div>
+                          <div className="min-w-[140px] break-words">
+                            {selectedDemoDetails.evaluationData.classEngagement || 'Not specified'}
+                          </div>
+                          <div className="min-w-[150px] break-words">
+                            {selectedDemoDetails.evaluationData.usageOfExample || 'Not specified'}
+                          </div>
+                          <div className="min-w-[130px] break-words">
+                            {selectedDemoDetails.evaluationData.keyConceptsCovered || 'Not specified'}
+                          </div>
+                          <div className="min-w-[150px] break-words">
+                            {selectedDemoDetails.evaluationData.accuracyOfInformation || 'Not specified'}
+                          </div>
+                          <div className="min-w-[130px] break-words">
+                            {selectedDemoDetails.evaluationData.flowOfContent || 'Not specified'}
+                          </div>
+                          <div className="min-w-[130px] break-words">
+                            {selectedDemoDetails.evaluationData.overallRating || 'Not specified'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Section 5: Final Assessment */}
+                  {selectedDemoDetails.type === 'offline_demo' && selectedDemoDetails.evaluationData && (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-blue-600 text-white px-4 py-2">
+                        <div className="grid grid-cols-6 gap-2 text-sm font-medium">
+                          <div className="min-w-[140px]">Reattempt Required</div>
+                          <div className="min-w-[200px]">Master Trainer Review</div>
+                          <div className="min-w-[140px]">Master Trainer Status</div>
+                          <div className="min-w-[120px]">Review Date</div>
+                          <div className="min-w-[120px]">Final Decision</div>
+                          <div className="min-w-[150px]">Comments</div>
+                          </div>
+                        </div>
+                      <div className="bg-white px-4 py-3">
+                        <div className="grid grid-cols-6 gap-2 text-sm">
+                          <div className="min-w-[140px] break-words">
+                            {selectedDemoDetails.evaluationData.reattemptNeeded === null ? 'Not specified' : 
+                             selectedDemoDetails.evaluationData.reattemptNeeded ? 'Yes' : 'No'}
+                          </div>
+                          <div className="min-w-[200px] break-words">
+                            {selectedDemoDetails.masterTrainerReview || 'Not reviewed'}
+                          </div>
+                          <div className="min-w-[140px]">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${
+                              selectedDemoDetails.masterTrainerStatus === 'approved' ? 'bg-green-100 text-green-800' :
+                              selectedDemoDetails.masterTrainerStatus === 'rejected' ? 'bg-red-100 text-red-800' :
+                              'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {selectedDemoDetails.masterTrainerStatus === 'approved' ? 'Approved' :
+                               selectedDemoDetails.masterTrainerStatus === 'rejected' ? 'Rejected' :
+                               'Pending'}
+                            </span>
+                          </div>
+                          <div className="min-w-[120px] break-words">
+                            {selectedDemoDetails.masterTrainerReviewedAt ? 
+                              new Date(selectedDemoDetails.masterTrainerReviewedAt).toLocaleDateString() : 'N/A'}
+                          </div>
+                          <div className="min-w-[120px] break-words">
+                            {selectedDemoDetails.status === 'approved' ? 'Approved' :
+                             selectedDemoDetails.status === 'rejected' ? 'Rejected' :
+                             'Pending'}
+                          </div>
+                          <div className="min-w-[150px] break-words">
+                            {selectedDemoDetails.comments || 'No comments'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end space-x-4 pt-6 border-t mt-6">
+                  <button
+                    onClick={closeDemoDetailsModal}
+                    className="px-6 py-3 text-base text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
+                    Close
+                  </button>
+                  
+                  {/* Show Accept/Reject buttons only for pending offline demos */}
+                  {selectedDemoDetails.type === 'offline_demo' && selectedDemoDetails.status === 'pending_approval' && (
+                    <>
+                      <button
+                        onClick={() => {
+                          const traineeId = selectedDemoDetails.traineeId || selectedDemoDetails.author_id;
+                          const demoIndex = selectedDemoDetails.demoIndex;
+                          handleDemoApproval(traineeId, demoIndex, 'reject');
+                        }}
+                        className="px-6 py-3 text-base text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors cursor-pointer"
+                      >
+                        Reject
+                      </button>
+                      <button
+                        onClick={() => {
+                          const traineeId = selectedDemoDetails.traineeId || selectedDemoDetails.author_id;
+                          const demoIndex = selectedDemoDetails.demoIndex;
+                          handleDemoApproval(traineeId, demoIndex, 'approve');
+                        }}
+                        className="px-6 py-3 text-base text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors cursor-pointer"
+                      >
+                        Accept
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

@@ -70,7 +70,6 @@ const ManageUsers = () => {
     }
   };
 
-
   const loadAllData = async () => {
     setLoading(true);
     await Promise.all([

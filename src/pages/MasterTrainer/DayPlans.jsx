@@ -28,6 +28,9 @@ const MasterTrainerDayPlans = () => {
   });
   const [selectedDayPlan, setSelectedDayPlan] = useState(null);
   const [showDayPlanModal, setShowDayPlanModal] = useState(false);
+  const [showFullReport, setShowFullReport] = useState(false);
+  const [fullReport, setFullReport] = useState(null);
+  const [loadingReport, setLoadingReport] = useState(false);
   const [dayPlanDetails, setDayPlanDetails] = useState([]);
 
   // Fetch trainee day plan statistics
@@ -125,7 +128,6 @@ const MasterTrainerDayPlans = () => {
     }
   };
 
-
   // Handle date change
   const handleDateChange = (date) => {
     setSelectedDate(date);
@@ -155,7 +157,6 @@ const MasterTrainerDayPlans = () => {
     }
   };
 
-
   // Handle day plan item click
   const handleDayPlanClick = (dayPlan) => {
     setSelectedDayPlan(dayPlan);
@@ -166,6 +167,24 @@ const MasterTrainerDayPlans = () => {
   const closeModal = () => {
     setShowDayPlanModal(false);
     setSelectedDayPlan(null);
+  };
+
+  const openFullReport = async () => {
+    const planId = selectedDayPlan?._id || selectedDayPlan?.id;
+    if (!planId) {
+      console.error('No day plan id available for report');
+      return;
+    }
+    try {
+      setLoadingReport(true);
+      const { data } = await axiosInstance.get(API_PATHS.TRAINEE_DAY_PLANS.GET_BY_ID(planId));
+      setFullReport(data);
+      setShowFullReport(true);
+    } catch (err) {
+      console.error('Error loading full report:', err);
+    } finally {
+      setLoadingReport(false);
+    }
   };
 
   // Load data on component mount
@@ -451,7 +470,6 @@ const MasterTrainerDayPlans = () => {
               </div>
             </div>
 
-
             {/* Additional Trainee Insights - Will be populated when backend APIs are ready */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="card">
@@ -520,7 +538,6 @@ const MasterTrainerDayPlans = () => {
                 </div>
               </div>
             </div>
-
 
             {/* Trainer Insights */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -713,12 +730,100 @@ const MasterTrainerDayPlans = () => {
                   Close
                 </button>
                 <button
-                  onClick={closeModal}
+                  onClick={openFullReport}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                 >
                   View Full Report
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFullReport && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[85vh] overflow-auto">
+            <div className="p-5 border-b flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Day Plan Details</h2>
+              <button onClick={() => setShowFullReport(false)} className="text-gray-500 hover:text-gray-700">
+                <LuX className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5">
+              {loadingReport && <div>Loading...</div>}
+              {!loadingReport && fullReport && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h3 className="text-lg font-medium mb-2">Trainee Information</h3>
+                      <div className="text-sm space-y-1">
+                        <div className="flex justify-between"><span className="text-gray-600">Name:</span><span>{fullReport?.trainee?.name || 'N/A'}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-600">ID:</span><span>{fullReport?.trainee?._id || 'N/A'}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-600">Status:</span><span className="capitalize">{fullReport?.status}</span></div>
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h3 className="text-lg font-medium mb-2">Timeline</h3>
+                      <div className="text-sm space-y-1">
+                        <div className="flex justify-between"><span className="text-gray-600">Submitted:</span><span>{fullReport?.submittedAt ? new Date(fullReport.submittedAt).toLocaleString() : 'N/A'}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-600">Completed:</span><span>{fullReport?.completedAt ? new Date(fullReport.completedAt).toLocaleString() : 'N/A'}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-600">Date:</span><span>{fullReport?.date ? new Date(fullReport.date).toLocaleDateString() : 'N/A'}</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white border rounded-lg p-4">
+                    <h3 className="text-lg font-medium mb-3">Tasks ({fullReport?.tasks?.length || 0})</h3>
+                    <div className="divide-y">
+                      {(fullReport?.tasks || []).map((task, idx) => (
+                        <div key={idx} className="py-3">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="font-medium">{task.title || task.name || `Task ${idx + 1}`}</p>
+                              {task?.time && <p className="text-xs text-gray-500">{task.time}</p>}
+                            </div>
+                            <span className={`px-2 py-1 rounded-full text-xs capitalize ${
+                              task.status === 'completed' ? 'bg-green-100 text-green-700' : task.status === 'in_progress' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-700'
+                            }`}>{task.status || 'pending'}</span>
+                          </div>
+                          {Array.isArray(task?.checkboxes) && task.checkboxes.length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-sm text-gray-700 mb-1">Additional Activities</p>
+                              <ul className="list-disc list-inside text-sm space-y-1">
+                                {task.checkboxes.map((cb, cidx) => (
+                                  <li key={cidx} className="flex items-center justify-between">
+                                    <span>{cb.label || cb.text || `Checkbox ${cidx + 1}`}</span>
+                                    <span className={`ml-3 text-xs px-2 py-0.5 rounded-full ${cb.completed ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>{cb.completed ? 'Completed' : 'Not Completed'}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-white border rounded-lg p-4">
+                    <h3 className="text-lg font-medium mb-3">EOD Review</h3>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between"><span className="text-gray-600">Status:</span><span className="capitalize">{fullReport?.eodUpdate?.status || 'N/A'}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Reviewed By:</span><span>{fullReport?.eodUpdate?.reviewedBy || 'N/A'}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Reviewed At:</span><span>{fullReport?.eodUpdate?.reviewedAt ? new Date(fullReport.eodUpdate.reviewedAt).toLocaleString() : 'N/A'}</span></div>
+                      {fullReport?.eodUpdate?.reviewComments && (
+                        <div className="pt-2">
+                          <p className="text-gray-600 mb-1">Comments:</p>
+                          <p className="text-gray-800 whitespace-pre-wrap">{fullReport.eodUpdate.reviewComments}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t flex justify-end">
+              <button onClick={() => setShowFullReport(false)} className="px-4 py-2 text-gray-700 hover:text-gray-900">Close</button>
             </div>
           </div>
         </div>

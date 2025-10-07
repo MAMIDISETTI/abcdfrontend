@@ -14,7 +14,7 @@ const BOADashboard = () => {
   const [stats, setStats] = useState({
     totalJoiners: 0,
     pendingActivations: 0,
-    uploadedResults: 0,
+    notJoiners: 0,
     activeTrainees: 0
   });
   const [recentJoiners, setRecentJoiners] = useState([]);
@@ -79,11 +79,22 @@ const BOADashboard = () => {
         department: joiner.department || 'N/A',
         status: joiner.status === 'active' ? 'Active' : joiner.status === 'pending' ? 'Pending' : 'Inactive'
       }));
+
+      // Calculate not joiners count
+      const notJoinersCount = recentJoinersData.filter(joiner => 
+        joiner.status && (
+          joiner.status.toLowerCase() === 'not_joined' ||
+          joiner.status.toLowerCase() === 'declined' ||
+          joiner.status.toLowerCase() === 'no_show' ||
+          joiner.status.toLowerCase() === 'cancelled' ||
+          joiner.status.toLowerCase() === 'inactive'
+        )
+      ).length;
       
       setStats({
         totalJoiners: joinerStats.total || 0,
         pendingActivations: joinerStats.pending || 0,
-        uploadedResults: 0, // This would need results data
+        notJoiners: notJoinersCount,
         activeTrainees: joinerStats.active || 0
       });
       
@@ -97,7 +108,7 @@ const BOADashboard = () => {
       setStats({
         totalJoiners: 0,
         pendingActivations: 0,
-        uploadedResults: 0,
+        notJoiners: 0,
         activeTrainees: 0
       });
       setRecentJoiners([]);
@@ -166,8 +177,7 @@ const BOADashboard = () => {
         
         calendarDataObj[dateStr] = item.count;
       });
-      
-      
+
       // Debug: Log what dates will be displayed on calendar
       Object.keys(calendarDataObj).forEach(date => {
       });
@@ -190,8 +200,25 @@ const BOADashboard = () => {
       const response = await axiosInstance.get(`${API_PATHS.JOINERS.GET_ALL}?limit=1000`);
       const allJoiners = response.data.joiners || [];
       
-      // Filter joiners by the selected date
+      // Debug: Log all joiners and their status
+      console.log('=== CALENDAR JOINER DEBUG ===');
+      console.log('All joiners from API:', allJoiners.length);
+      const joinerStatuses = allJoiners.map(j => ({ 
+        name: j.candidate_name || j.name, 
+        email: j.candidate_personal_mail_id || j.email, 
+        status: j.status 
+      }));
+      console.log('Joiner statuses:', joinerStatuses);
+      console.log('Status values:', joinerStatuses.map(j => j.status));
+      
+      // Filter joiners by the selected date and exclude inactive joiners
       const filteredJoiners = allJoiners.filter(joiner => {
+        // Exclude inactive joiners
+        if (joiner.status === 'inactive') {
+          console.log('❌ Excluding inactive joiner:', joiner.candidate_name || joiner.name, joiner.status);
+          return false;
+        }
+        
         // Try multiple possible date field names in order of preference
         const dateField = joiner.date_of_joining || joiner.joiningDate || joiner.joining_date;
         if (!dateField) {
@@ -229,6 +256,14 @@ const BOADashboard = () => {
         
         return match;
       });
+      
+      console.log('Filtered joiners for date:', filteredJoiners.length);
+      console.log('Filtered joiners details:', filteredJoiners.map(j => ({
+        name: j.candidate_name || j.name,
+        email: j.candidate_personal_mail_id || j.email,
+        status: j.status
+      })));
+      console.log('=== END CALENDAR JOINER DEBUG ===');
       
       // Debug logging
       
@@ -369,6 +404,42 @@ const BOADashboard = () => {
     }
   };
 
+  // Fetch not joiners (people who were supposed to join but didn't)
+  const fetchNotJoiners = async () => {
+    try {
+      const response = await axiosInstance.get(`${API_PATHS.JOINERS.GET_ALL}?limit=100&sortBy=joiningDate&sortOrder=asc`);
+      const allJoinersData = response.data.joiners || [];
+      
+      // Filter for not joiners (people who were supposed to join but didn't)
+      // This could be people with status 'not_joined', 'declined', 'no_show', etc.
+      const notJoiners = allJoinersData.filter(joiner => 
+        joiner.status && (
+          joiner.status.toLowerCase() === 'not_joined' ||
+          joiner.status.toLowerCase() === 'declined' ||
+          joiner.status.toLowerCase() === 'no_show' ||
+          joiner.status.toLowerCase() === 'cancelled'
+        )
+      ).map(joiner => ({
+        ...joiner,
+        name: joiner.candidate_name || joiner.name,
+        email: joiner.candidate_personal_mail_id || joiner.email,
+        joiningDate: joiner.date_of_joining || joiner.joiningDate
+      }));
+      
+      // Client-side sorting by joining date
+      const sortedNotJoiners = notJoiners.sort((a, b) => {
+        const dateA = new Date(a.joiningDate);
+        const dateB = new Date(b.joiningDate);
+        return dateA - dateB; // Ascending order (oldest first)
+      });
+      
+      setAllJoiners(sortedNotJoiners);
+    } catch (error) {
+      console.error('Error fetching not joiners:', error);
+      toast.error('Failed to fetch not joiners data');
+    }
+  };
+
   // Handle different popup types
   const handleTotalJoinersClick = () => {
     setPopupType('all');
@@ -384,6 +455,12 @@ const BOADashboard = () => {
 
   const handlePendingJoinersClick = () => {
     setShowPendingAssignmentsPopup(true);
+  };
+
+  const handleNotJoinersClick = () => {
+    setPopupType('not-joiners');
+    setShowJoinersPopup(true);
+    fetchNotJoiners();
   };
 
   useEffect(() => {
@@ -415,7 +492,6 @@ const BOADashboard = () => {
       
       return joinerDate === today && (joiner.status === 'Active' || joiner.status === 'active');
     });
-    
 
     // If no joiners found for today, show recent active joiners from last 7 days
     let finalJoiners = todayActiveJoiners;
@@ -458,7 +534,6 @@ const BOADashboard = () => {
       setFilteredRecentJoiners(filtered);
     }
   }, [searchTerm, recentJoiners]);
-
 
   // Form validation
   const validateForm = () => {
@@ -632,7 +707,7 @@ const BOADashboard = () => {
                 placeholder="Search by name, email, or department..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full md:w-80 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full md:w-96 lg:w-[500px] pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
@@ -865,13 +940,13 @@ const BOADashboard = () => {
           </div>
         </div>
 
-        <div className="card cursor-pointer hover:shadow-lg transition-shadow">
+        <div className="card cursor-pointer hover:shadow-lg transition-shadow" onClick={handleNotJoinersClick}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Uploaded Results</p>
-              <p className="text-2xl font-bold text-green-600">{stats.uploadedResults}</p>
+              <p className="text-sm font-medium text-gray-600">Not Joiners</p>
+              <p className="text-2xl font-bold text-red-600">{stats.notJoiners}</p>
             </div>
-            <LuFileSpreadsheet className="w-8 h-8 text-green-500" />
+            <LuX className="w-8 h-8 text-red-500" />
           </div>
         </div>
 
