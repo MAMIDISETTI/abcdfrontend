@@ -105,9 +105,9 @@ const MasterTrainerDayPlans = () => {
         const dayPlans = data.dayPlans;
         setDateFilterStats({
           totalPlans: dayPlans.length,
-          published: dayPlans.filter(plan => plan.status === 'completed').length, // Changed from 'approved' to 'completed'
-          completed: dayPlans.filter(plan => plan.status === 'completed').length,
-          draft: dayPlans.filter(plan => plan.status === 'draft').length
+          published: dayPlans.filter(plan => plan.status === 'approved').length, // Plans approved by trainer
+          completed: dayPlans.filter(plan => plan.status === 'completed' && plan.eodUpdate?.status === 'approved').length, // Plans with EOD approved
+          draft: dayPlans.filter(plan => plan.status === 'draft' || plan.status === 'in_progress').length
         });
       } else {
         setDateFilterStats({
@@ -131,8 +131,73 @@ const MasterTrainerDayPlans = () => {
   // Handle date change
   const handleDateChange = (date) => {
     setSelectedDate(date);
-    getDateFilterStats(date);
-    fetchDayPlanDetails(date);
+    if (date) {
+      getDateFilterStats(date);
+      fetchDayPlanDetails(date);
+    } else {
+      // Clear date filter - fetch all plans
+      setDateFilterStats({
+        totalPlans: 0,
+        published: 0,
+        completed: 0,
+        draft: 0
+      });
+      fetchAllDayPlanDetails();
+    }
+  };
+
+  // Clear date filter - show all plans
+  const clearDateFilter = () => {
+    setSelectedDate('');
+    setDateFilterStats({
+      totalPlans: 0,
+      published: 0,
+      completed: 0,
+      draft: 0
+    });
+    fetchAllDayPlanDetails();
+  };
+
+  // Fetch all day plan details (when no date filter)
+  const fetchAllDayPlanDetails = async () => {
+    try {
+      const res = await axiosInstance.get(API_PATHS.TRAINEE_DAY_PLANS.GET_ALL, {
+        params: { 
+          role: 'master_trainer'
+        }
+      });
+      
+      if (res.data.success && res.data.dayPlans) {
+        // Transform the data to ensure consistent structure
+        const transformedPlans = res.data.dayPlans.map(plan => {
+          // Extract employee ID from various possible sources
+          const empId = plan.traineeId || 
+                       plan.trainee?.employeeId || 
+                       plan.trainee?.employee_id ||
+                       (plan.trainee && plan.trainee.employeeId) ||
+                       'N/A';
+          
+          return {
+            ...plan,
+            id: plan._id || plan.id,
+            traineeName: plan.traineeName || plan.trainee?.name || 'Unknown Trainee',
+            traineeId: empId,
+            employeeId: empId,
+            department: plan.department || plan.trainee?.department || 'N/A',
+            tasks: plan.tasks || [],
+            status: plan.status || 'draft',
+            submittedAt: plan.submittedAt || plan.createdAt,
+            completedAt: plan.completedAt || (plan.eodUpdate?.reviewedAt && plan.status === 'completed' ? plan.eodUpdate.reviewedAt : null)
+          };
+        });
+        setDayPlanDetails(transformedPlans);
+      } else {
+        setDayPlanDetails([]);
+      }
+    } catch (err) {
+      console.error("Error fetching all day plan details:", err);
+      setDayPlanDetails([]);
+    }
   };
 
   // Fetch day plan details for the selected date
@@ -147,7 +212,29 @@ const MasterTrainerDayPlans = () => {
       });
       
       if (res.data.success && res.data.dayPlans) {
-        setDayPlanDetails(res.data.dayPlans);
+        // Transform the data to ensure consistent structure
+        const transformedPlans = res.data.dayPlans.map(plan => {
+          // Extract employee ID from various possible sources
+          const empId = plan.traineeId || 
+                       plan.trainee?.employeeId || 
+                       plan.trainee?.employee_id ||
+                       (plan.trainee && plan.trainee.employeeId) ||
+                       'N/A';
+          
+          return {
+            ...plan,
+            id: plan._id || plan.id,
+            traineeName: plan.traineeName || plan.trainee?.name || 'Unknown Trainee',
+            traineeId: empId,
+            employeeId: empId,
+            department: plan.department || plan.trainee?.department || 'N/A',
+            tasks: plan.tasks || [],
+            status: plan.status || 'draft',
+            submittedAt: plan.submittedAt || plan.createdAt,
+            completedAt: plan.completedAt || (plan.eodUpdate?.reviewedAt && plan.status === 'completed' ? plan.eodUpdate.reviewedAt : null)
+          };
+        });
+        setDayPlanDetails(transformedPlans);
       } else {
         setDayPlanDetails([]);
       }
@@ -217,12 +304,7 @@ const MasterTrainerDayPlans = () => {
     <DashboardLayout activeMenu="Day Plans">
       <div className="my-5">
         {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Day Plans Management</h1>
-            <p className="text-gray-600 mt-1">Monitor and track day plans for trainers and trainees</p>
-          </div>
-        </div>
+
 
         {/* Tabs */}
         <div className="card mb-6">
@@ -279,44 +361,58 @@ const MasterTrainerDayPlans = () => {
                     onChange={(e) => handleDateChange(e.target.value)}
                     className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                  {selectedDate && (
+                    <button
+                      onClick={clearDateFilter}
+                      className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 bg-white border border-gray-300 rounded-md hover:bg-gray-50 flex items-center space-x-1 cursor-pointer"
+                    >
+                      <LuX className="w-4 h-4" />
+                      <span>Show All</span>
+                    </button>
+                  )}
                 </div>
                 
-                {/* Date Filter Stats */}
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-white p-4 rounded-lg border border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-600">Total Plans</p>
-                        <p className="text-2xl font-bold text-gray-900">{dateFilterStats.totalPlans}</p>
+                {/* Date Filter Stats - Clear Display */}
+                <div className="mt-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Statistics for Selected Date</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-white p-4 rounded-lg border-2 border-gray-300 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Plans</p>
+                          <p className="text-3xl font-bold text-gray-900">{dateFilterStats.totalPlans}</p>
+                        </div>
+                        <LuCalendar className="w-10 h-10 text-blue-500 opacity-60" />
                       </div>
-                      <LuCalendar className="w-8 h-8 text-blue-500" />
                     </div>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg border border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-600">Published</p>
-                        <p className="text-2xl font-bold text-green-600">{dateFilterStats.published}</p>
+                    <div className="bg-green-50 p-4 rounded-lg border-2 border-green-300 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-green-700 uppercase tracking-wide mb-1 font-semibold">Approved</p>
+                          <p className="text-3xl font-bold text-green-700">{dateFilterStats.published}</p>
+                          <p className="text-xs text-green-600 mt-1">By Trainer</p>
+                        </div>
+                        <LuCheck className="w-10 h-10 text-green-600 opacity-70" />
                       </div>
-                      <LuCheck className="w-8 h-8 text-green-500" />
                     </div>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg border border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-600">Completed</p>
-                        <p className="text-2xl font-bold text-purple-600">{dateFilterStats.completed}</p>
+                    <div className="bg-purple-50 p-4 rounded-lg border-2 border-purple-300 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-purple-700 uppercase tracking-wide mb-1 font-semibold">Completed</p>
+                          <p className="text-3xl font-bold text-purple-700">{dateFilterStats.completed}</p>
+                          <p className="text-xs text-purple-600 mt-1">EOD Approved</p>
+                        </div>
+                        <LuCheck className="w-10 h-10 text-purple-600 opacity-70" />
                       </div>
-                      <LuCheck className="w-8 h-8 text-purple-500" />
                     </div>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg border border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-600">Draft</p>
-                        <p className="text-2xl font-bold text-orange-600">{dateFilterStats.draft}</p>
+                    <div className="bg-white p-4 rounded-lg border-2 border-gray-300 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">In Progress</p>
+                          <p className="text-3xl font-bold text-orange-600">{dateFilterStats.draft}</p>
+                        </div>
+                        <LuClock className="w-10 h-10 text-orange-500 opacity-60" />
                       </div>
-                      <LuClock className="w-8 h-8 text-orange-500" />
                     </div>
                   </div>
                 </div>
@@ -324,7 +420,9 @@ const MasterTrainerDayPlans = () => {
               
               {/* Day Plans List */}
               <div className="mt-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Day Plans for {selectedDate}</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  {selectedDate ? `Day Plans for ${selectedDate}` : 'All Day Plans'}
+                </h3>
                 {dayPlanDetails.length > 0 ? (
                   <div className="space-y-3">
                     {dayPlanDetails.map((dayPlan) => (
@@ -336,8 +434,32 @@ const MasterTrainerDayPlans = () => {
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
-                              <h4 className="text-lg font-medium text-gray-900">{dayPlan.traineeName}</h4>
-                              <span className="text-sm text-gray-500">({dayPlan.traineeId})</span>
+                              <h4 className="text-lg font-medium text-gray-900">
+                                {dayPlan.traineeName || dayPlan.trainee?.name || 'Unknown Trainee'}
+                              </h4>
+                              {(() => {
+                                // Get employee ID from various possible sources
+                                const empId = dayPlan.employeeId || 
+                                             dayPlan.trainee?.employeeId || 
+                                             dayPlan.traineeId ||
+                                             dayPlan.trainee?.employee_id;
+                                
+                                // Show employee ID if it exists and is not the auto-generated EMP_ format
+                                // Allow any format except EMP_ prefix
+                                if (empId && 
+                                    empId !== 'N/A' && 
+                                    empId !== null && 
+                                    empId !== undefined &&
+                                    String(empId).trim() !== '' &&
+                                    !String(empId).startsWith('EMP_')) {
+                                  return (
+                                    <span className="text-sm text-gray-500 font-medium">
+                                      (ID: {empId})
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                 dayPlan.status === 'completed' 
                                   ? 'bg-purple-100 text-purple-800' 
@@ -352,7 +474,9 @@ const MasterTrainerDayPlans = () => {
                                  dayPlan.status === 'in_progress' ? 'In Progress' : 'Pending'}
                               </span>
                             </div>
-                            <p className="text-sm text-gray-600 mb-2">{dayPlan.department}</p>
+                            <p className="text-sm text-gray-600 mb-2">
+                              {dayPlan.department || dayPlan.trainee?.department || 'N/A'}
+                            </p>
                             <div className="flex items-center gap-4 text-sm text-gray-500">
                               <span>Tasks: {dayPlan.tasks.length}</span>
                               <span>Completed: {dayPlan.tasks.filter(t => t.status === 'completed').length}</span>
@@ -381,91 +505,98 @@ const MasterTrainerDayPlans = () => {
                 )}
               </div>
               
-              {/* Stats Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Total Plans */}
-                <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
-                  <div className="flex items-center">
-                    <div className="p-3 bg-blue-500 rounded-full">
-                      <LuCalendar className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-blue-600">Total Plans</p>
-                      <p className="text-2xl font-bold text-blue-900">
-                        {addThousandsSeparator(traineeStats.totalPlans)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Published Plans */}
-                <div className="bg-green-50 p-6 rounded-lg border border-green-200">
-                  <div className="flex items-center">
-                    <div className="p-3 bg-green-500 rounded-full">
-                      <LuCheck className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-green-600">Published</p>
-                      <p className="text-2xl font-bold text-green-900">
-                        {addThousandsSeparator(traineeStats.published)}
-                      </p>
+              {/* Overall Statistics - Clear and Prominent */}
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Overall Statistics</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Total Plans */}
+                  <div className="bg-blue-50 p-6 rounded-lg border-2 border-blue-300 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-blue-700 uppercase tracking-wide mb-1 font-semibold">Total Plans</p>
+                        <p className="text-3xl font-bold text-blue-900">
+                          {addThousandsSeparator(traineeStats.totalPlans)}
+                        </p>
+                        <p className="text-xs text-blue-600 mt-1">All Day Plans</p>
+                      </div>
+                      <div className="p-3 bg-blue-500 rounded-full">
+                        <LuCalendar className="w-8 h-8 text-white" />
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Completed Plans */}
-                <div className="bg-purple-50 p-6 rounded-lg border border-purple-200">
-                  <div className="flex items-center">
-                    <div className="p-3 bg-purple-500 rounded-full">
-                      <LuCheck className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-purple-600">Completed</p>
-                      <p className="text-2xl font-bold text-purple-900">
-                        {addThousandsSeparator(traineeStats.completed)}
-                      </p>
+                  {/* Approved Plans - Highlighted */}
+                  <div className="bg-green-50 p-6 rounded-lg border-2 border-green-400 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-green-700 uppercase tracking-wide mb-1 font-semibold">Approved</p>
+                        <p className="text-3xl font-bold text-green-900">
+                          {addThousandsSeparator(traineeStats.published)}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">By Trainers</p>
+                      </div>
+                      <div className="p-3 bg-green-500 rounded-full">
+                        <LuCheck className="w-8 h-8 text-white" />
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Draft Plans */}
-                <div className="bg-orange-50 p-6 rounded-lg border border-orange-200">
-                  <div className="flex items-center">
-                    <div className="p-3 bg-orange-500 rounded-full">
-                      <LuClock className="w-6 h-6 text-white" />
+                  {/* Completed Plans - Highlighted */}
+                  <div className="bg-purple-50 p-6 rounded-lg border-2 border-purple-400 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-purple-700 uppercase tracking-wide mb-1 font-semibold">Completed</p>
+                        <p className="text-3xl font-bold text-purple-900">
+                          {addThousandsSeparator(traineeStats.completed)}
+                        </p>
+                        <p className="text-xs text-purple-600 mt-1">EOD Approved</p>
+                      </div>
+                      <div className="p-3 bg-purple-500 rounded-full">
+                        <LuCheck className="w-8 h-8 text-white" />
+                      </div>
                     </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-orange-600">Draft</p>
-                      <p className="text-2xl font-bold text-orange-900">
-                        {addThousandsSeparator(traineeStats.draft)}
-                      </p>
+                  </div>
+
+                  {/* In Progress Plans */}
+                  <div className="bg-orange-50 p-6 rounded-lg border-2 border-orange-300 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-orange-700 uppercase tracking-wide mb-1 font-semibold">In Progress</p>
+                        <p className="text-3xl font-bold text-orange-900">
+                          {addThousandsSeparator(traineeStats.draft)}
+                        </p>
+                        <p className="text-xs text-orange-600 mt-1">Pending Approval</p>
+                      </div>
+                      <div className="p-3 bg-orange-500 rounded-full">
+                        <LuClock className="w-8 h-8 text-white" />
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Completion Rate */}
-              <div className="mt-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">Completion Rate</span>
-                  <span className="text-sm font-medium text-gray-900">
+              <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-base font-semibold text-gray-900">Completion Rate</span>
+                  <span className="text-2xl font-bold text-blue-600">
                     {traineeStats.published > 0 
                       ? Math.round((traineeStats.completed / traineeStats.published) * 100)
                       : 0}%
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
                   <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-300"
                     style={{ 
                       width: traineeStats.published > 0 
-                        ? `${(traineeStats.completed / traineeStats.published) * 100}%`
+                        ? `${Math.min((traineeStats.completed / traineeStats.published) * 100, 100)}%`
                         : '0%'
                     }}
                   ></div>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Based on published plans: {traineeStats.completed} completed out of {traineeStats.published} published
+                <p className="text-sm text-gray-600 mt-2">
+                  <span className="font-semibold text-purple-700">{traineeStats.completed}</span> completed out of <span className="font-semibold text-green-700">{traineeStats.published}</span> approved day plans
                 </p>
               </div>
             </div>
@@ -608,10 +739,6 @@ const MasterTrainerDayPlans = () => {
                     <div className="flex justify-between">
                       <span className="text-gray-600">Name:</span>
                       <span className="font-medium">{selectedDayPlan.traineeName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">ID:</span>
-                      <span className="font-medium">{selectedDayPlan.traineeId}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Department:</span>
@@ -759,7 +886,6 @@ const MasterTrainerDayPlans = () => {
                       <h3 className="text-lg font-medium mb-2">Trainee Information</h3>
                       <div className="text-sm space-y-1">
                         <div className="flex justify-between"><span className="text-gray-600">Name:</span><span>{fullReport?.trainee?.name || 'N/A'}</span></div>
-                        <div className="flex justify-between"><span className="text-gray-600">ID:</span><span>{fullReport?.trainee?._id || 'N/A'}</span></div>
                         <div className="flex justify-between"><span className="text-gray-600">Status:</span><span className="capitalize">{fullReport?.status}</span></div>
                       </div>
                     </div>

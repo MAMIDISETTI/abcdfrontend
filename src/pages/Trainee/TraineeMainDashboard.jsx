@@ -16,7 +16,8 @@ import {
   LuX,
   LuClock3,
   LuPencil,
-  LuLoader
+  LuLoader,
+  LuFilter
 } from 'react-icons/lu';
 import { UserContext } from '../../context/userContext';
 import moment from 'moment';
@@ -28,8 +29,9 @@ const TraineeMainDashboard = () => {
   const { user } = useContext(UserContext);
   const [activeTab, setActiveTab] = useState('day-plan');
   const [dayPlan, setDayPlan] = useState({
-    tasks: [{ id: 1, title: '', timeAllocation: '', description: '' }],
+    title: '', // Plan title (Static, Responsive, Modern Responsive, etc.)
     date: moment().format('YYYY-MM-DD'),
+    topics: [], // Topics/items that can span multiple days
     status: 'draft' // draft, submitted
   });
 
@@ -56,6 +58,7 @@ const TraineeMainDashboard = () => {
   const [modalTaskRemarks, setModalTaskRemarks] = useState({});
   const [modalCheckboxStatuses, setModalCheckboxStatuses] = useState({}); // key: planId-taskIndex-checkboxKey
   const [modalCheckboxRemarks, setModalCheckboxRemarks] = useState({});
+  const [statusFilter, setStatusFilter] = useState('all'); // all, pending, approved, rejected, completed
 
   // Load submitted day plans from backend
   useEffect(() => {
@@ -66,8 +69,10 @@ const TraineeMainDashboard = () => {
         if (response.data.dayPlans) {
           const formattedPlans = response.data.dayPlans.map(plan => ({
             id: plan._id,
+            title: plan.title || '', // Include title
             date: plan.date,
             tasks: plan.tasks,
+            topics: plan.topics || [], // Include topics for hour calculation
             checkboxes: plan.checkboxes || {},
             submittedAt: plan.submittedAt,
             status: plan.status,
@@ -128,11 +133,49 @@ const TraineeMainDashboard = () => {
     if (savedDraft) {
       try {
         const draftData = JSON.parse(savedDraft);
-        setDayPlan({
-          tasks: draftData.tasks,
-          date: draftData.date,
-          status: 'draft'
-        });
+        // Support both old format (tasks) and new format (topics)
+        if (draftData.topics) {
+          // New format with topics - preserve nested structure
+          setDayPlan({
+            title: draftData.title || '',
+            date: draftData.date || moment().format('YYYY-MM-DD'),
+            topics: draftData.topics || [],
+            status: 'draft'
+          });
+        } else if (draftData.tasks) {
+          // Old format - convert to new format
+          const convertedTopics = draftData.tasks.map((task, index) => {
+            let timeRange = '';
+            let estimatedHours = '';
+            if (task.timeAllocation) {
+              if (task.timeAllocation.includes('-') || task.timeAllocation.includes('–')) {
+                timeRange = task.timeAllocation;
+              } else {
+                const hoursMatch = task.timeAllocation.match(/(\d+(?:\.\d+)?)\s*hours?/i);
+                if (hoursMatch) {
+                  estimatedHours = hoursMatch[1];
+                } else {
+                  timeRange = task.timeAllocation;
+                }
+              }
+            }
+            return {
+              id: task.id || Date.now() + index,
+              name: task.title || '',
+              timeRange: timeRange,
+              estimatedHours: estimatedHours,
+              assignedDay: draftData.date || moment().format('YYYY-MM-DD'),
+              description: task.description || '',
+              subtopics: []
+            };
+          });
+          setDayPlan({
+            title: draftData.title || '',
+            date: draftData.date || moment().format('YYYY-MM-DD'),
+            topics: convertedTopics,
+            status: 'draft'
+          });
+        }
         setDynamicCheckboxes(draftData.checkboxes || {});
         toast.success('Draft loaded from previous session');
       } catch (error) {
@@ -142,32 +185,159 @@ const TraineeMainDashboard = () => {
     }
   }, []);
 
-  const handleAddTask = () => {
+  // Add a new topic/item
+  const handleAddTopic = (targetDate = null, parentTopicId = null) => {
+    const dateToUse = targetDate || dayPlan.date;
+    const newTopic = { 
+      id: Date.now(), 
+      name: '', // Topic name (MCQs, coding practices, cheat sheets, learning sets, etc.)
+      timeRange: '', // Time range (e.g., 9:00-10:00)
+      estimatedHours: '', // Estimated hours (can't complete in one day - around 8 hours)
+      assignedDay: dateToUse, // Which day this topic is assigned to
+      description: '',
+      subtopics: [] // Nested topics
+    };
+
+    if (parentTopicId) {
+      // Add as nested topic
+      setDayPlan(prev => ({
+        ...prev,
+        topics: prev.topics.map(topic => {
+          if (topic.id === parentTopicId) {
+            return {
+              ...topic,
+              subtopics: [...(topic.subtopics || []), newTopic]
+            };
+          }
+          // Recursively search in subtopics
+          return updateTopicRecursively(topic, parentTopicId, (t) => ({
+            ...t,
+            subtopics: [...(t.subtopics || []), newTopic]
+          }));
+        })
+      }));
+    } else {
+      // Add as top-level topic
+      setDayPlan(prev => ({
+        ...prev,
+        topics: [...prev.topics, newTopic]
+      }));
+    }
+  };
+
+  // Helper function to recursively update topics
+  const updateTopicRecursively = (topic, targetId, updateFn) => {
+    if (topic.id === targetId) {
+      return updateFn(topic);
+    }
+    if (topic.subtopics && topic.subtopics.length > 0) {
+      return {
+        ...topic,
+        subtopics: topic.subtopics.map(subtopic => 
+          updateTopicRecursively(subtopic, targetId, updateFn)
+        )
+      };
+    }
+    return topic;
+  };
+
+  // Helper function to recursively find and remove topic
+  const removeTopicRecursively = (topics, targetId) => {
+    return topics
+      .filter(topic => topic.id !== targetId)
+      .map(topic => ({
+        ...topic,
+        subtopics: topic.subtopics ? removeTopicRecursively(topic.subtopics, targetId) : []
+      }));
+  };
+
+  // Helper function to recursively update a topic by ID
+  const updateTopicById = (topic, targetId, field, value) => {
+    if (topic.id === targetId) {
+      return { ...topic, [field]: value };
+    }
+    if (topic.subtopics && topic.subtopics.length > 0) {
+      return {
+        ...topic,
+        subtopics: topic.subtopics.map(subtopic =>
+          updateTopicById(subtopic, targetId, field, value)
+        )
+      };
+    }
+    return topic;
+  };
+
+  // Update topic field
+  const handleTopicChange = (topicId, field, value, parentTopicId = null) => {
     setDayPlan(prev => ({
       ...prev,
-      tasks: [...prev.tasks, { 
-        id: Date.now(), 
-        title: '', 
-        timeAllocation: '', 
-        description: '' 
-      }]
+      topics: prev.topics.map(topic => {
+        if (parentTopicId) {
+          // Update nested topic - recursively search for parent and update child
+          return updateTopicRecursively(topic, parentTopicId, (t) => {
+            if (t.subtopics) {
+              return {
+                ...t,
+                subtopics: t.subtopics.map(subtopic =>
+                  subtopic.id === topicId ? { ...subtopic, [field]: value } : subtopic
+                )
+              };
+            }
+            return t;
+          });
+        } else {
+          // Update topic recursively (works for both top-level and nested)
+          return updateTopicById(topic, topicId, field, value);
+        }
+      })
     }));
   };
 
-  const handleTaskChange = (taskId, field, value) => {
-    setDayPlan(prev => ({
-      ...prev,
-      tasks: prev.tasks.map(task => 
-        task.id === taskId ? { ...task, [field]: value } : task
-      )
-    }));
+  // Remove topic
+  const handleRemoveTopic = (topicId, parentTopicId = null) => {
+    setDayPlan(prev => {
+      if (parentTopicId) {
+        // Remove nested topic
+        return {
+          ...prev,
+          topics: prev.topics.map(topic => 
+            updateTopicRecursively(topic, parentTopicId, (t) => ({
+              ...t,
+              subtopics: (t.subtopics || []).filter(subtopic => subtopic.id !== topicId)
+            }))
+          )
+        };
+      } else {
+        // Remove top-level topic
+        return {
+          ...prev,
+          topics: removeTopicRecursively(prev.topics, topicId)
+        };
+      }
+    });
   };
 
-  const handleRemoveTask = (taskId) => {
-    setDayPlan(prev => ({
-      ...prev,
-      tasks: prev.tasks.filter(task => task.id !== taskId)
-    }));
+  // Get topics grouped by day
+  const getTopicsByDay = () => {
+    const grouped = {};
+    dayPlan.topics.forEach(topic => {
+      const day = topic.assignedDay || dayPlan.date;
+      if (!grouped[day]) {
+        grouped[day] = [];
+      }
+      grouped[day].push(topic);
+    });
+    return grouped;
+  };
+
+  // Get available days (today and future days up to 7 days ahead)
+  const getAvailableDays = () => {
+    const days = [];
+    const today = moment(dayPlan.date);
+    for (let i = 0; i < 7; i++) {
+      days.push(today.clone().add(i, 'days').format('YYYY-MM-DD'));
+    }
+    return days;
   };
 
   // Handle adding a new checkbox
@@ -257,12 +427,73 @@ const TraineeMainDashboard = () => {
   // Helper function to reset the form
   const resetForm = () => {
     setDayPlan({
-      tasks: [{ id: 1, title: '', timeAllocation: '', description: '' }],
+      title: '',
       date: moment().format('YYYY-MM-DD'),
+      topics: [],
       status: 'draft'
     });
     setDynamicCheckboxes({});
     setIsEditing(false);
+  };
+
+  // Helper function to get display status based on workflow
+  const getDisplayStatus = (plan) => {
+    // If EOD is submitted and pending approval
+    if (plan.status === 'pending' && plan.eodUpdate?.status === 'submitted') {
+      return { status: 'pending', label: 'Pending Approval', color: 'bg-orange-100 text-orange-800' };
+    }
+    // If status is completed (EOD approved or any completed status)
+    if (plan.status === 'completed') {
+      // Check if EOD was approved (final completion)
+      if (plan.eodUpdate?.status === 'approved') {
+        return { status: 'completed', label: 'Completed', color: 'bg-green-100 text-green-800' };
+      }
+      // If completed but no eodUpdate, still show as completed (green)
+      return { status: 'completed', label: 'Completed', color: 'bg-green-100 text-green-800' };
+    }
+    // If trainer approved the day plan (status is approved)
+    if (plan.status === 'approved') {
+      return { status: 'approved', label: 'Approved', color: 'bg-green-100 text-green-800' };
+    }
+    // If status is in_progress (trainee submitted, waiting for trainer approval)
+    if (plan.status === 'in_progress') {
+      return { status: 'in_progress', label: 'In Progress', color: 'bg-blue-100 text-blue-800' };
+    }
+    // If rejected
+    if (plan.status === 'rejected') {
+      return { status: 'rejected', label: 'Rejected', color: 'bg-red-100 text-red-800' };
+    }
+    // Default
+    return { status: plan.status, label: plan.status || 'Draft', color: 'bg-gray-100 text-gray-800' };
+  };
+
+  // Filter plans based on selected status
+  const getFilteredPlans = () => {
+    if (statusFilter === 'all') {
+      return submittedDayPlans;
+    }
+    return submittedDayPlans.filter(plan => {
+      const displayStatus = getDisplayStatus(plan);
+      // Map filter values to actual statuses
+      if (statusFilter === 'pending') {
+        // "Pending" filter shows plans waiting for approval:
+        // - "In Progress" (waiting for trainer to approve day plan)
+        // - "Pending Approval" (EOD submitted, waiting for trainer to approve EOD)
+        return displayStatus.status === 'pending' || displayStatus.status === 'in_progress';
+      }
+      if (statusFilter === 'approved') {
+        // "Approved" filter shows plans approved by trainer (status='approved')
+        return displayStatus.status === 'approved';
+      }
+      if (statusFilter === 'rejected') {
+        return displayStatus.status === 'rejected';
+      }
+      if (statusFilter === 'completed') {
+        // "Completed" filter shows plans with EOD approved
+        return displayStatus.status === 'completed';
+      }
+      return false;
+    });
   };
 
   const handleViewDayPlan = (plan) => {
@@ -274,64 +505,85 @@ const TraineeMainDashboard = () => {
     // Close the view popup if it's open
     setShowViewPopup(false);
 
-    // Ensure tasks have proper IDs for checkbox mapping
-    const tasksWithIds = plan.tasks.map((task, index) => {
-      // Preserve the original task ID if it exists, otherwise generate one
-      const taskWithId = {
-        ...task,
-        id: task.id || `task_${Date.now()}_${index}` // Generate ID if missing
-      };
-      return taskWithId;
-    });
+    // Support both old format (tasks) and new format (topics)
+    let topics = [];
+    let title = plan.title || '';
 
-    // Load the plan data into the form for editing
-    setDayPlan({
-      tasks: tasksWithIds,
-      date: plan.date,
-      status: 'draft'
-    });
-    
-    // Map checkboxes to use the task IDs
-    const mappedCheckboxes = {};
-    if (plan.checkboxes) {
+    if (plan.topics && plan.topics.length > 0) {
+      // New format with topics - preserve nested structure
+      const mapTopic = (topic, index) => ({
+        id: topic.id || Date.now() + index,
+        name: topic.name || '',
+        timeRange: topic.timeRange || '',
+        estimatedHours: topic.estimatedHours || '',
+        assignedDay: topic.assignedDay || plan.date,
+        description: topic.description || '',
+        subtopics: topic.subtopics ? topic.subtopics.map((subtopic, subIndex) => 
+          mapTopic(subtopic, subIndex)
+        ) : []
+      });
+      topics = plan.topics.map((topic, index) => mapTopic(topic, index));
+    } else if (plan.tasks && plan.tasks.length > 0) {
+      // Old format - convert tasks to topics
+      // Try to extract title from task titles if they follow the pattern "Title - Topic"
+      const firstTaskTitle = plan.tasks[0]?.title || '';
+      if (firstTaskTitle.includes(' - ')) {
+        const parts = firstTaskTitle.split(' - ');
+        title = parts[0];
+      }
       
-      // For each task, map its checkboxes using the task ID
-      tasksWithIds.forEach((task, index) => {
-        const taskId = task.id;
+      topics = plan.tasks.map((task, index) => {
+        let topicName = task.title || '';
+        // Remove title prefix if present
+        if (topicName.includes(' - ')) {
+          topicName = topicName.split(' - ').slice(1).join(' - ');
+        }
         
-        // Try multiple possible keys for the checkboxes
-        const possibleKeys = [
-          String(taskId),     // Task ID as string (e.g., "1")
-          taskId,             // Task ID as number (e.g., 1)
-          String(index),      // Task index as string (e.g., "0")
-          index               // Task index as number (e.g., 0)
-        ];
-
-        let found = false;
-        for (const key of possibleKeys) {
-          if (plan.checkboxes[key]) {
-            mappedCheckboxes[taskId] = plan.checkboxes[key];
-            found = true;
-            break;
+        // Extract time range or hours from timeAllocation
+        let timeRange = '';
+        let estimatedHours = '';
+        if (task.timeAllocation) {
+          // Check if it's a time range format (e.g., 9:00-10:00)
+          if (task.timeAllocation.includes('-') || task.timeAllocation.includes('–')) {
+            timeRange = task.timeAllocation;
+          } else {
+            // Try to extract hours if it's in "X hours" format
+            const hoursMatch = task.timeAllocation.match(/(\d+(?:\.\d+)?)\s*hours?/i);
+            if (hoursMatch) {
+              estimatedHours = hoursMatch[1];
+            } else {
+              timeRange = task.timeAllocation;
+            }
           }
         }
         
-        if (!found) {
-        }
+        return {
+          id: task.id || Date.now() + index,
+          name: topicName,
+          timeRange: timeRange,
+          estimatedHours: estimatedHours,
+          assignedDay: plan.date, // Default to plan date
+          description: task.description || '',
+          subtopics: [] // Old format doesn't have nested topics
+        };
       });
     }
 
-    setDynamicCheckboxes(mappedCheckboxes);
+    // Load the plan data into the form for editing
+    setDayPlan({
+      title: title,
+      date: plan.date,
+      topics: topics,
+      status: 'draft'
+    });
+    
+    setDynamicCheckboxes(plan.checkboxes || {});
     
     // Set editing state
     setIsEditing(true);
     
     // Remove the plan from submitted plans since we're editing it
     setSubmittedDayPlans(prev => prev.filter(p => p.id !== plan.id));
-
-    // Add a small delay to check if dynamicCheckboxes state is updated
-    setTimeout(() => {
-    }, 100);
     
     toast.success('Day plan loaded for editing');
   };
@@ -350,8 +602,10 @@ const TraineeMainDashboard = () => {
         if (response.data.dayPlans) {
           const formattedPlans = response.data.dayPlans.map(plan => ({
             id: plan._id,
+            title: plan.title || '', // Include title
             date: plan.date,
             tasks: plan.tasks,
+            topics: plan.topics || [], // Include topics for hour calculation
             checkboxes: plan.checkboxes || {},
             submittedAt: plan.submittedAt,
             status: plan.status
@@ -367,76 +621,149 @@ const TraineeMainDashboard = () => {
     toast.success('Edit cancelled');
   };
 
+  // Helper function to recursively validate topics
+  const validateTopicsRecursively = (topics) => {
+    for (const topic of topics) {
+      if (!topic.name || !topic.name.trim()) {
+        return { valid: false, message: 'Please fill in all topic names' };
+      }
+      if (!topic.timeRange || !topic.timeRange.trim()) {
+        return { valid: false, message: 'Please fill in time range for all topics (e.g., 9:00-10:00)' };
+      }
+      // Validate nested topics if they exist
+      if (topic.subtopics && topic.subtopics.length > 0) {
+        const nestedValidation = validateTopicsRecursively(topic.subtopics);
+        if (!nestedValidation.valid) {
+          return nestedValidation;
+        }
+      }
+    }
+    return { valid: true };
+  };
+
+  // Helper function to recursively flatten topics for submission
+  // Each topic/subtopic shows only as "Plan Title - Topic Name" (no nested paths)
+  const flattenTopicsRecursively = (topics, planTitle = '') => {
+    const flattened = [];
+    
+    const processTopic = (topic) => {
+      // Only use the current topic name, not the full nested path
+      // Format: "Plan Title - Topic Name"
+      const taskTitle = planTitle ? `${planTitle} - ${topic.name}` : topic.name;
+      flattened.push({
+        title: taskTitle,
+        timeAllocation: topic.timeRange || topic.estimatedHours || '',
+        description: topic.description || `Time: ${topic.timeRange || ''}`
+      });
+      
+      // Recursively process subtopics - each subtopic gets only "Plan Title - Subtopic Name"
+      if (topic.subtopics && topic.subtopics.length > 0) {
+        topic.subtopics.forEach(subtopic => {
+          processTopic(subtopic); // Recursive call - each level only uses planTitle, not parent names
+        });
+      }
+    };
+    
+    topics.forEach(topic => {
+      processTopic(topic);
+    });
+    
+    return flattened;
+  };
+
   const handleSaveDayPlan = () => {
-    // Validate regular tasks
-    const hasEmptyTasks = dayPlan.tasks.some(task => 
-      !task.title.trim() || !task.timeAllocation || !isValidTimeRange(task.timeAllocation)
-    );
-    
-    // Validate dynamic checkboxes
-    const hasEmptyCheckboxes = Object.values(dynamicCheckboxes).some(taskCheckboxes => 
-      Object.values(taskCheckboxes).some(checkbox => 
-        checkbox.checked && (!checkbox.label.trim() || !checkbox.timeAllocation || !isValidTimeRange(checkbox.timeAllocation))
-      )
-    );
-    
-    if (hasEmptyTasks || hasEmptyCheckboxes) {
-      toast.error('Please fill in all task and checkbox details with valid time ranges (e.g., 9:05am-12:20pm)');
+    // Validate title
+    if (!dayPlan.title.trim()) {
+      toast.error('Please enter a plan title (e.g., Static, Responsive, Modern Responsive)');
+      return;
+    }
+
+    // Validate topics
+    if (dayPlan.topics.length === 0) {
+      toast.error('Please add at least one topic/item');
+      return;
+    }
+
+    const validation = validateTopicsRecursively(dayPlan.topics);
+    if (!validation.valid) {
+      toast.error(validation.message);
       return;
     }
 
     // Save to localStorage only
     const draftData = {
+      title: dayPlan.title,
       date: dayPlan.date,
-      tasks: dayPlan.tasks,
-      checkboxes: dynamicCheckboxes,
+      topics: dayPlan.topics,
       savedAt: new Date().toISOString()
     };
 
     localStorage.setItem('traineeDayPlanDraft', JSON.stringify(draftData));
     
-    // Reset form after successful save
-    resetForm();
-    
     toast.success('Day plan saved as draft');
   };
 
   const handleSubmitDayPlan = async () => {
-    // Validate regular tasks
-    const hasEmptyTasks = dayPlan.tasks.some(task => 
-      !task.title.trim() || !task.timeAllocation || !isValidTimeRange(task.timeAllocation)
-    );
-    
-    // Validate dynamic checkboxes
-    const hasEmptyCheckboxes = Object.values(dynamicCheckboxes).some(taskCheckboxes => 
-      Object.values(taskCheckboxes).some(checkbox => 
-        checkbox.checked && (!checkbox.label.trim() || !checkbox.timeAllocation || !isValidTimeRange(checkbox.timeAllocation))
-      )
-    );
-    
-    if (hasEmptyTasks || hasEmptyCheckboxes) {
-      toast.error('Please fill in all task and checkbox details with valid time ranges (e.g., 9:05am-12:20pm)');
+    // Validate title
+    if (!dayPlan.title.trim()) {
+      toast.error('Please enter a plan title (e.g., Static, Responsive, Modern Responsive)');
+      return;
+    }
+
+    // Validate topics
+    if (dayPlan.topics.length === 0) {
+      toast.error('Please add at least one topic/item');
+      return;
+    }
+
+    const validation = validateTopicsRecursively(dayPlan.topics);
+    if (!validation.valid) {
+      toast.error(validation.message);
       return;
     }
 
     setIsSubmittingDayPlan(true);
 
     try {
-      // Submit to backend
+      // Convert topics to tasks format for backend compatibility
+      // Group topics by assigned day and create tasks for each day
+      const topicsByDay = getTopicsByDay();
+      const allTasks = [];
+      
+      // Create tasks for each day, handling nested topics
+      Object.keys(topicsByDay).forEach(day => {
+        topicsByDay[day].forEach(topic => {
+          // Flatten nested topics recursively - pass plan title so each topic shows as "Plan Title - Topic Name"
+          const flattenedTopics = flattenTopicsRecursively([topic], dayPlan.title);
+          flattenedTopics.forEach(flattenedTopic => {
+            allTasks.push({
+              title: flattenedTopic.title, // Already includes plan title in format: "Plan Title - Topic Name"
+              timeAllocation: flattenedTopic.timeAllocation, // Use time range
+              description: flattenedTopic.description || `Time: ${flattenedTopic.timeAllocation}. Assigned to ${moment(day).format('MMM DD, YYYY')}`
+            });
+          });
+        });
+      });
+
+      // Submit to backend - use the first day as the main date, but include all topics
       const response = await axiosInstance.post(API_PATHS.TRAINEE_DAY_PLANS.CREATE, {
+        title: dayPlan.title, // Include title in submission
         date: dayPlan.date,
-        tasks: dayPlan.tasks,
-        checkboxes: dynamicCheckboxes,
-        status: 'submitted'
+        tasks: allTasks,
+        topics: dayPlan.topics, // Also send topics for future use (with nested structure)
+        checkboxes: {},
+        status: 'in_progress' // Set status to 'in_progress' when trainee submits day plan
       });
 
       if (response.data.success !== false) {
         // Add to submitted day plans for immediate UI update
         const submittedPlan = {
           id: response.data.dayPlan._id,
+          title: dayPlan.title,
           date: dayPlan.date,
-          tasks: dayPlan.tasks,
-          checkboxes: dynamicCheckboxes,
+          tasks: allTasks,
+          topics: dayPlan.topics,
+          checkboxes: {},
           submittedAt: new Date().toISOString(),
           status: 'in_progress' // Show as In Progress when submitted
         };
@@ -585,11 +912,33 @@ const TraineeMainDashboard = () => {
       const response = await axiosInstance.post('/api/trainee-dayplans/eod-update', requestData);
 
       if (response.data.success !== false) {
-    setEodStatus(prev => ({ ...prev, submitted: true }));
-    toast.success('EOD status updated successfully');
+        setEodStatus(prev => ({ ...prev, submitted: true }));
+        toast.success('EOD status updated successfully');
         
         // Close all expanded task dropdowns
         setExpandedTasks({});
+        
+        // Refresh day plans list to update status
+        try {
+          const refreshResponse = await axiosInstance.get(API_PATHS.TRAINEE_DAY_PLANS.GET_ALL);
+          if (refreshResponse.data.dayPlans) {
+            const formattedPlans = refreshResponse.data.dayPlans.map(plan => ({
+              id: plan._id,
+              title: plan.title || '',
+              date: plan.date,
+              tasks: plan.tasks,
+              topics: plan.topics || [],
+              checkboxes: plan.checkboxes || {},
+              submittedAt: plan.submittedAt,
+              status: plan.status,
+              eodUpdate: plan.eodUpdate,
+              createdBy: plan.createdBy || 'trainee'
+            }));
+            setSubmittedDayPlans(formattedPlans);
+          }
+        } catch (refreshError) {
+          console.error('Error refreshing day plans:', refreshError);
+        }
         
         // Send notification to trainer
         // This will be handled by the backend
@@ -673,7 +1022,7 @@ const TraineeMainDashboard = () => {
         const response = await axiosInstance.get(API_PATHS.TRAINEE_DAY_PLANS.GET_ALL);
         if (response.data.dayPlans) {
           const formatted = response.data.dayPlans.map(p => ({
-            id: p._id, date: p.date, tasks: p.tasks, checkboxes: p.checkboxes || {}, submittedAt: p.submittedAt, status: p.status, eodUpdate: p.eodUpdate, createdBy: p.createdBy || 'trainee'
+            id: p._id, title: p.title || '', date: p.date, tasks: p.tasks, topics: p.topics || [], checkboxes: p.checkboxes || {}, submittedAt: p.submittedAt, status: p.status, eodUpdate: p.eodUpdate, createdBy: p.createdBy || 'trainee'
           }));
           setSubmittedDayPlans(formatted);
         }
@@ -685,201 +1034,381 @@ const TraineeMainDashboard = () => {
     }
   };
 
-  const renderDayPlan = () => (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">Day Plan Submission</h2>
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-500">Date: {moment(dayPlan.date).format('MMM DD, YYYY')}</span>
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-              dayPlan.status === 'submitted' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-            }`}>
-              {dayPlan.status === 'submitted' ? 'Submitted' : 'Draft'}
-            </span>
+  // Recursive component to render topics with nesting support
+  const renderTopic = (topic, topicIndex, level = 0, parentTopicId = null) => {
+    const availableDays = getAvailableDays();
+    const indentStyle = level > 0 ? { marginLeft: `${level * 1}rem` } : {};
+    const bgColorClass = level % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+    
+    return (
+      <div key={topic.id} className={`${bgColorClass} border border-gray-200 rounded-lg p-4`} style={indentStyle}>
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex-1">
+            <div className="flex items-center space-x-2 mb-2">
+              <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                {level === 0 ? `Topic ${topicIndex + 1}` : `Sub-topic ${topicIndex + 1}`}
+              </span>
+            </div>
+            <input
+              type="text"
+              value={topic.name || ''}
+              onChange={(e) => handleTopicChange(topic.id, 'name', e.target.value, parentTopicId)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium"
+              placeholder="e.g., MCQs, Coding Practices, Cheat Sheets, Learning Sets, etc."
+            />
+          </div>
+          <button
+            onClick={() => handleRemoveTopic(topic.id, parentTopicId)}
+            className="ml-3 text-red-500 hover:text-red-700 cursor-pointer"
+          >
+            <LuX className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Time Range <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={topic.timeRange || ''}
+              onChange={(e) => handleTopicChange(topic.id, 'timeRange', e.target.value, parentTopicId)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="e.g., 9:00-10:00"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Enter the time range for completing this topic
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Day</label>
+            <select
+              value={topic.assignedDay || dayPlan.date}
+              onChange={(e) => handleTopicChange(topic.id, 'assignedDay', e.target.value, parentTopicId)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              {availableDays.map(availableDay => (
+                <option key={availableDay} value={availableDay}>
+                  {moment(availableDay).isSame(moment(), 'day') 
+                    ? `Today (${moment(availableDay).format('MMM DD, YYYY')})`
+                    : moment(availableDay).format('MMM DD, YYYY')
+                  }
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        <div className="space-y-4">
-          {dayPlan.tasks.map((task, index) => (
-            <div key={task.id} className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-medium text-gray-900">Task {index + 1}</h3>
-                {dayPlan.tasks.length > 1 && (
-                  <button
-                    onClick={() => handleRemoveTask(task.id)}
-                    className="text-red-500 hover:text-red-700 cursor-pointer"
-                  >
-                    <LuX className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Task Title</label>
-                  <input
-                    type="text"
-                    value={task.title}
-                    onChange={(e) => handleTaskChange(task.id, 'title', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Enter task title"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Time Allocation</label>
-                  <input
-                    type="text"
-                    value={task.timeAllocation}
-                    onChange={(e) => handleTaskChange(task.id, 'timeAllocation', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      task.timeAllocation && !isValidTimeRange(task.timeAllocation)
-                        ? 'border-red-300 bg-red-50'
-                        : 'border-gray-300'
-                    }`}
-                    placeholder="e.g., 9:00am-12:00pm or 9:05am–12:20pm"
-                  />
-                  {task.timeAllocation && !isValidTimeRange(task.timeAllocation) && (
-                    <p className="text-xs text-red-500 mt-1">Please use format: 9:00am-12:00pm or 9:05am–12:20pm</p>
-                  )}
-                </div>
-              </div>
+        <div className="mb-3">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
+          <textarea
+            value={topic.description || ''}
+            onChange={(e) => handleTopicChange(topic.id, 'description', e.target.value, parentTopicId)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            rows="2"
+            placeholder="Add any additional notes or details about this topic..."
+          />
+        </div>
 
-              {/* Dynamic Checkboxes Section */}
-              <div className="mt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="block text-sm font-medium text-gray-700">Checkboxes</label>
-                  <button
-                    onClick={() => handleAddCheckbox(task.id)}
-                    className="cursor-pointer px-3 py-1 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center space-x-1"
-                  >
-                    <LuPlus className="w-3 h-3" />
-                    <span>Add</span>
-                  </button>
-                </div>
-                
-                {/* Display checkboxes for this task */}
-                {(() => {
-                  
-                  if (!dynamicCheckboxes[task.id] || Object.keys(dynamicCheckboxes[task.id]).length === 0) {
-                    return (
-                      <div className="text-sm text-gray-500 italic mb-3">
-                        No checkboxes added for this task
-                      </div>
-                    );
-                  }
-                  return Object.values(dynamicCheckboxes[task.id]).map((checkbox) => (
-                  <div key={checkbox.id} className="mb-3 p-3 bg-gray-50 rounded-lg border">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <input
-                        type="checkbox"
-                        checked={checkbox.checked}
-                        onChange={() => handleCheckboxToggle(task.id, checkbox.id)}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <input
-                        type="text"
-                        value={checkbox.label}
-                        onChange={(e) => handleCheckboxLabelChange(task.id, checkbox.id, e.target.value)}
-                        className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Enter checkbox label"
-                      />
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={checkbox.timeAllocation}
-                          onChange={(e) => handleCheckboxTimeChange(task.id, checkbox.id, e.target.value)}
-                          className={`w-32 px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            checkbox.timeAllocation && !isValidTimeRange(checkbox.timeAllocation)
-                              ? 'border-red-300 bg-red-50'
-                              : 'border-gray-300'
-                          }`}
-                          placeholder="9:05am-12:20pm"
-                        />
-                        {checkbox.timeAllocation && !isValidTimeRange(checkbox.timeAllocation) && (
-                          <div className="absolute top-full left-0 mt-1 text-xs text-red-500 whitespace-nowrap">
-                            Invalid format
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => handleRemoveCheckbox(task.id, checkbox.id)}
-                        className="text-red-500 hover:text-red-700 cursor-pointer"
-                      >
-                        <LuX className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ));
-                })()}
-              </div>
-              
-              <div className="mt-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea
-                  value={task.description}
-                  onChange={(e) => handleTaskChange(task.id, 'description', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  rows="2"
-                  placeholder="Describe the task in detail"
-                />
-              </div>
-            </div>
-          ))}
-          
+        {/* Add Topic button inside this topic section for nested topics */}
+        <div className="mb-3 pt-3 border-t border-gray-200">
           <button
-            onClick={handleAddTask}
-            className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-500 transition-colors flex items-center justify-center space-x-2 cursor-pointer"
+            onClick={() => handleAddTopic(topic.assignedDay || dayPlan.date, topic.id)}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 cursor-pointer text-sm"
           >
             <LuPlus className="w-4 h-4" />
-            <span>Add Another Task</span>
+            <span>Add Topic</span>
           </button>
         </div>
 
-        <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
-          {isEditing && (
-            <button
-              onClick={handleCancelEdit}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2 cursor-pointer"
-            >
-              <LuX className="w-4 h-4" />
-              <span>Cancel</span>
-            </button>
-          )}
-          
-          <button
-            onClick={handleSaveDayPlan}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2 cursor-pointer"
-          >
-            <LuSave className="w-4 h-4" />
-            <span>Save as Draft</span>
-          </button>
-          
-          <button
-            onClick={handleSubmitDayPlan}
-            disabled={isSubmittingDayPlan}
-            className={`cursor-pointer px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 ${
-              isSubmittingDayPlan 
-                ? 'opacity-75 cursor-not-allowed' 
-                : 'cursor-pointer'
-            }`}
-          >
-            {isSubmittingDayPlan && <LuLoader className="w-4 h-4 animate-spin" />}
-            {!isSubmittingDayPlan && <LuCheck className="w-4 h-4" />}
-            <span>
-              {isSubmittingDayPlan 
-                ? (isEditing ? 'Updating...' : 'Submitting...') 
-                : (isEditing ? 'Update Day Plan' : 'Submit Day Plan')
-              }
-            </span>
-          </button>
-        </div>
+        {/* Render nested topics */}
+        {topic.subtopics && topic.subtopics.length > 0 && (
+          <div className="mt-3 space-y-3 pl-4 border-l-2 border-blue-200">
+            {topic.subtopics.map((subtopic, subtopicIndex) => 
+              renderTopic(subtopic, subtopicIndex, level + 1, topic.id)
+            )}
+          </div>
+        )}
       </div>
+    );
+  };
+
+  // Helper function to parse time range and calculate hours
+  const parseTimeRangeToHours = (timeRange) => {
+    if (!timeRange || !timeRange.trim()) return 0;
+    
+    // Handle time range format like "9:00-10:00" or "9:00am-10:00am"
+    const timeRangePattern = /(\d{1,2}):(\d{2})\s*(am|pm)?[–-](\d{1,2}):(\d{2})\s*(am|pm)?/i;
+    const match = timeRange.match(timeRangePattern);
+    
+    if (match) {
+      let startHour = parseInt(match[1]);
+      const startMin = parseInt(match[2]);
+      const startPeriod = match[3]?.toLowerCase();
+      let endHour = parseInt(match[4]);
+      const endMin = parseInt(match[5]);
+      const endPeriod = match[6]?.toLowerCase();
+      
+      // Convert to 24-hour format
+      if (startPeriod === 'pm' && startHour !== 12) startHour += 12;
+      if (startPeriod === 'am' && startHour === 12) startHour = 0;
+      if (endPeriod === 'pm' && endHour !== 12) endHour += 12;
+      if (endPeriod === 'am' && endHour === 12) endHour = 0;
+      
+      const startMinutes = startHour * 60 + startMin;
+      const endMinutes = endHour * 60 + endMin;
+      const diffMinutes = endMinutes - startMinutes;
+      
+      // Handle case where end time is next day
+      const totalMinutes = diffMinutes < 0 ? diffMinutes + 24 * 60 : diffMinutes;
+      return totalMinutes / 60; // Convert to hours
+    }
+    
+    // Try to parse as hours (e.g., "8 hours", "8.5 hours")
+    const hoursMatch = timeRange.match(/(\d+(?:\.\d+)?)\s*hours?/i);
+    if (hoursMatch) {
+      return parseFloat(hoursMatch[1]);
+    }
+    
+    return 0;
+  };
+
+  // Calculate total hours from a plan
+  const calculateTotalHours = (plan) => {
+    let totalHours = 0;
+    
+    // Priority 1: Calculate from tasks if they exist (tasks are the actual submitted items)
+    // This is the most reliable source since tasks are what's displayed and stored
+    if (plan.tasks && plan.tasks.length > 0) {
+      plan.tasks.forEach((task, index) => {
+        if (task.timeAllocation && task.timeAllocation.trim()) {
+          const hours = parseTimeRangeToHours(task.timeAllocation);
+          totalHours += hours;
+        }
+      });
+    }
+    // Priority 2: If no tasks, calculate from topics (for draft plans or new format)
+    else if (plan.topics && plan.topics.length > 0) {
+      const calculateFromTopics = (topics) => {
+        topics.forEach(topic => {
+          const hasSubtopics = topic.subtopics && topic.subtopics.length > 0;
+          
+          if (hasSubtopics) {
+            // If topic has subtopics, only count the subtopics (recursively)
+            calculateFromTopics(topic.subtopics);
+          } else {
+            // This is a leaf node - count its timeRange
+            if (topic.timeRange && topic.timeRange.trim()) {
+              totalHours += parseTimeRangeToHours(topic.timeRange);
+            }
+          }
+        });
+      };
+      calculateFromTopics(plan.topics);
+    }
+    
+    return totalHours;
+  };
+
+  const renderDayPlan = () => {
+    const topicsByDay = getTopicsByDay();
+    const availableDays = getAvailableDays();
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">Create Day Plan</h2>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-500">Base Date: {moment(dayPlan.date).format('MMM DD, YYYY')}</span>
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                dayPlan.status === 'submitted' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+              }`}>
+                {dayPlan.status === 'submitted' ? 'Submitted' : 'Draft'}
+              </span>
+            </div>
+          </div>
+
+          {/* Plan Title */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Plan Title <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={dayPlan.title}
+              onChange={(e) => setDayPlan(prev => ({ ...prev, title: e.target.value }))}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
+              placeholder="e.g., Static, Responsive, Modern Responsive, etc."
+            />
+            <p className="text-xs text-gray-500 mt-1">Enter a title for your learning plan</p>
+          </div>
+
+          {/* Date Selector */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Base Date</label>
+            <input
+              type="date"
+              value={dayPlan.date}
+              onChange={(e) => setDayPlan(prev => ({ ...prev, date: e.target.value }))}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Add Topic Button */}
+          <div className="mb-6">
+            <button
+              onClick={() => handleAddTopic(dayPlan.date)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 cursor-pointer"
+            >
+              <LuPlus className="w-4 h-4" />
+              <span>Add Topic</span>
+            </button>
+          </div>
+
+          {/* Topics by Day */}
+          <div className="space-y-6">
+            {dayPlan.topics.length !== 0 && (
+              Object.keys(topicsByDay)
+                .filter(day => (topicsByDay[day] || []).length > 0)
+                .map((day) => {
+                  const dayTopics = topicsByDay[day] || [];
+                  const isToday = moment(day).isSame(moment(), 'day');
+                  const isPast = moment(day).isBefore(moment(), 'day');
+
+                  return (
+                    <div key={day} className="border border-gray-200 rounded-lg p-5 bg-gray-50">
+                      <div className="flex items-center mb-4">
+                        <div className="flex items-center space-x-3">
+                          <LuCalendar className="w-5 h-5 text-blue-600" />
+                          <div>
+                            <h3 className="font-semibold text-gray-900">
+                              {isToday ? 'Today' : moment(day).format('MMM DD, YYYY')}
+                              {isPast && <span className="ml-2 text-xs text-gray-500">(Past)</span>}
+                            </h3>
+                            <p className="text-xs text-gray-500">
+                              {dayTopics.length} {dayTopics.length === 1 ? 'topic' : 'topics'} assigned
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Topics for this day */}
+                      <div className="space-y-3">
+                        {dayTopics.map((topic, topicIndex) => renderTopic(topic, topicIndex, 0, null))}
+                      </div>
+                    </div>
+                  );
+                })
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
+            {isEditing && (
+              <button
+                onClick={handleCancelEdit}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2 cursor-pointer"
+              >
+                <LuX className="w-4 h-4" />
+                <span>Cancel</span>
+              </button>
+            )}
+            
+            <div className="flex items-center space-x-3 ml-auto">
+              <button
+                onClick={handleSaveDayPlan}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2 cursor-pointer"
+              >
+                <LuSave className="w-4 h-4" />
+                <span>Save as Draft</span>
+              </button>
+              
+              <button
+                onClick={handleSubmitDayPlan}
+                disabled={isSubmittingDayPlan}
+                className={`cursor-pointer px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 ${
+                  isSubmittingDayPlan 
+                    ? 'opacity-75 cursor-not-allowed' 
+                    : 'cursor-pointer'
+                }`}
+              >
+                {isSubmittingDayPlan && <LuLoader className="w-4 h-4 animate-spin" />}
+                {!isSubmittingDayPlan && <LuCheck className="w-4 h-4" />}
+                <span>
+                  {isSubmittingDayPlan 
+                    ? (isEditing ? 'Updating...' : 'Submitting...') 
+                    : (isEditing ? 'Update Day Plan' : 'Submit Day Plan')
+                  }
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
 
       {/* Previous Day Plans */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Previous Day Plans</h3>
+        
+        {/* Filter Bar */}
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+          <div className="flex items-center space-x-4">
+            <LuFilter className="w-5 h-5 text-gray-600" />
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                statusFilter === 'all'
+                  ? 'bg-gray-200 text-gray-900 border border-gray-300'
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setStatusFilter('pending')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                statusFilter === 'pending'
+                  ? 'bg-gray-200 text-gray-900 border border-gray-300'
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Pending
+            </button>
+            <button
+              onClick={() => setStatusFilter('approved')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                statusFilter === 'approved'
+                  ? 'bg-gray-200 text-gray-900 border border-gray-300'
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Approved
+            </button>
+            <button
+              onClick={() => setStatusFilter('rejected')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                statusFilter === 'rejected'
+                  ? 'bg-gray-200 text-gray-900 border border-gray-300'
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Rejected
+            </button>
+            <button
+              onClick={() => setStatusFilter('completed')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                statusFilter === 'completed'
+                  ? 'bg-gray-200 text-gray-900 border border-gray-300'
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Completed
+            </button>
+          </div>
+        </div>
+
         {isLoadingDayPlans ? (
           <div className="text-center py-12">
             <div className="p-4 bg-gray-100 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center">
@@ -888,73 +1417,56 @@ const TraineeMainDashboard = () => {
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Day Plans...</h3>
             <p className="text-gray-500 text-sm max-w-md mx-auto">Please wait while we fetch your submitted day plans.</p>
           </div>
-        ) : submittedDayPlans.length > 0 ? (
-        <div className="space-y-2">
-            {submittedDayPlans.map((plan) => (
-              <div key={plan.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div>
-                <p className="font-medium text-gray-900">
-                    {moment(plan.date).format('MMM DD, YYYY')}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {plan.tasks.length} task{plan.tasks.length !== 1 ? 's' : ''} • 
-                    {plan.checkboxes && Object.keys(plan.checkboxes).length > 0 && 
-                      ` ${Object.values(plan.checkboxes).flat().length} checkbox${Object.values(plan.checkboxes).flat().length !== 1 ? 'es' : ''}`
-                    }
-                  </p>
-              </div>
-                <div className="flex items-center space-x-2">
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    plan.status === 'draft' 
-                      ? 'bg-gray-100 text-gray-800'
-                      : plan.status === 'in_progress'
-                      ? 'bg-blue-100 text-blue-800'
-                      : plan.status === 'completed'
-                      ? 'bg-green-100 text-green-800'
-                      : plan.status === 'rejected'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {plan.status === 'draft' ? 'Draft' :
-                     plan.status === 'in_progress' ? 'In Progress' :
-                     plan.status === 'completed' ? 'Completed' :
-                     plan.status === 'rejected' ? 'Rejected' :
-                     plan.status}
-                  </span>
-                  <div className="flex items-center space-x-2">
-                    <button 
-                      onClick={() => handleViewDayPlan(plan)}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center space-x-1 cursor-pointer"
-                    >
-                <LuEye className="w-4 h-4" />
-                <span>View</span>
-              </button>
-                    {plan.status === 'in_progress' && (
-                      <button 
-                        onClick={() => handleEditDayPlan(plan)}
-                        className="text-green-600 hover:text-green-800 text-sm font-medium flex items-center space-x-1 cursor-pointer"
-                      >
-                        <LuPencil className="w-4 h-4" />
-                        <span>Edit</span>
-                      </button>
-                    )}
+        ) : getFilteredPlans().length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {getFilteredPlans().map((plan) => {
+              const displayStatus = getDisplayStatus(plan);
+              const totalHours = calculateTotalHours(plan);
+              const hours = Math.floor(totalHours);
+              const minutes = Math.round((totalHours - hours) * 60);
+              const hoursDisplay = minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+              
+              return (
+                <div key={plan.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleViewDayPlan(plan)}>
+                  <h4 className="font-semibold text-gray-900 mb-3 text-lg">
+                    {plan.title && plan.title.trim() ? plan.title : moment(plan.date).format('MMM DD, YYYY')}
+                  </h4>
+                  <div className="space-y-2 mb-3">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <LuUser className="w-4 h-4 mr-2" />
+                      <span className="font-medium">{user?.name || 'Trainee'}</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <LuClock className="w-4 h-4 mr-2" />
+                      <span className="font-medium">{hoursDisplay}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className={`px-3 py-1 rounded-md text-sm font-medium ${displayStatus.color}`}>
+                      {displayStatus.label}
+                    </span>
                   </div>
                 </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
         ) : (
           <div className="text-center py-12">
             <div className="p-4 bg-gray-100 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center">
               <LuFileText className="w-10 h-10 text-gray-400" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No Day Plans Found</h3>
-            <p className="text-gray-500 text-sm max-w-md mx-auto">You haven't submitted any day plans yet. Create and submit your first day plan above!</p>
+            <p className="text-gray-500 text-sm max-w-md mx-auto">
+              {statusFilter !== 'all' 
+                ? `No day plans found with status "${statusFilter}".` 
+                : "You haven't submitted any day plans yet. Create and submit your first day plan above!"}
+            </p>
           </div>
         )}
       </div>
     </div>
   );
+  };
 
   const renderTaskStatus = () => (
     <div className="space-y-6">
@@ -975,8 +1487,8 @@ const TraineeMainDashboard = () => {
         {(() => {
           const todayPlans = submittedDayPlans.filter(plan => 
             moment(plan.date).isSame(moment(), 'day') &&
-            plan.status === 'completed' && 
-            plan.eodUpdate?.status !== 'approved' // Only show completed day plans that haven't been fully approved yet
+            (plan.status === 'approved' || (plan.status === 'pending' && plan.eodUpdate?.status === 'submitted')) && 
+            plan.eodUpdate?.status !== 'approved' // Only show approved day plans that haven't been fully approved yet
           );
           
           // Debug logging
@@ -1009,27 +1521,43 @@ const TraineeMainDashboard = () => {
                     </div>
               </div>
               
-                  {/* Tasks from Day Plan - hidden by default; use View button to preview */}
-                  <div className="hidden">
+                  {/* Tasks from Day Plan - show when status is approved, otherwise hidden */}
+                  <div className={plan.status === 'approved' ? 'mt-4 space-y-4' : 'hidden'}>
                     {plan.tasks.map((task, index) => {
                       const taskKey = `${plan.id}-${index}`;
                       const isExpanded = expandedTasks[taskKey];
                       const currentStatus = taskStatuses[taskKey];
                       const currentRemarks = taskRemarks[taskKey] || '';
                       const isEodApproved = plan.eodUpdate?.status === 'approved' && plan.status === 'completed';
+                      // Tasks are editable when status is "approved" and EOD hasn't been approved yet
+                      const isEditable = plan.status === 'approved' && !isEodApproved;
                       
                       return (
                         <div key={index} className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-all duration-200">
                           <div 
                             className={`flex items-center justify-between mb-3 p-3 rounded-lg transition-all duration-200 ${
-                              !isEodApproved ? 'cursor-pointer hover:bg-blue-50 hover:border-blue-200' : 'cursor-default bg-gray-50'
+                              isEditable ? 'cursor-pointer hover:bg-blue-50 hover:border-blue-200' : 'cursor-default bg-gray-50'
                             }`}
-                            onClick={() => !isEodApproved && toggleTaskExpansion(plan.id, index)}
+                            onClick={() => isEditable && toggleTaskExpansion(plan.id, index)}
                           >
                             <div className="flex items-center space-x-3">
                               <LuCheck className="w-4 h-4 text-gray-600" />
                               <div>
-                                <h4 className="font-semibold text-gray-900">Task {index + 1}: {task.title}</h4>
+                                {(() => {
+                                  // Clean up nested titles for display
+                                  let displayTitle = task.title;
+                                  if (plan.title && task.title.includes(' - ')) {
+                                    const parts = task.title.split(' - ');
+                                    if (parts[0] === plan.title && parts.length > 2) {
+                                      displayTitle = `${plan.title} - ${parts[parts.length - 1]}`;
+                                    } else if (parts.length > 2 && !task.title.startsWith(plan.title)) {
+                                      displayTitle = parts[parts.length - 1];
+                                    }
+                                  }
+                                  return (
+                                    <h4 className="font-semibold text-gray-900">Task {index + 1}: {displayTitle}</h4>
+                                  );
+                                })()}
                                 <p className="text-sm text-gray-500">{task.timeAllocation}</p>
                               </div>
                             </div>
@@ -1050,7 +1578,7 @@ const TraineeMainDashboard = () => {
                                   ✓ Finalized
                                 </span>
                               )}
-                              {!isEodApproved && (
+                              {isEditable && (
                                 <span className="text-gray-500 text-sm">{isExpanded ? '▼' : '▶'}</span>
                               )}
                             </div>
@@ -1064,8 +1592,8 @@ const TraineeMainDashboard = () => {
                           {isExpanded && (
                             <div className="space-y-3 mt-4">
                               <div className="flex items-center space-x-4">
-                                {/* Editable radio buttons - only show if not approved */}
-                                {!isEodApproved ? (
+                                {/* Editable radio buttons - show when editable (approved status and EOD not approved) */}
+                                {isEditable ? (
                                   <>
                 <label className="flex items-center space-x-2">
                                   <input 
@@ -1146,9 +1674,9 @@ const TraineeMainDashboard = () => {
               <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Remarks/Blockers
-                                    {!isEodApproved && <span className="text-red-500 ml-1">*</span>}
+                                    {isEditable && <span className="text-red-500 ml-1">*</span>}
                                   </label>
-                                  {!isEodApproved ? (
+                                  {isEditable ? (
                 <textarea
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows="2"
@@ -1187,7 +1715,7 @@ const TraineeMainDashboard = () => {
                                   return (
                                     <label key={i} className="flex items-center justify-between text-sm py-1">
                                       <div className="flex items-center gap-2">
-                                        <input type="checkbox" className="w-4 h-4" disabled={isEodApproved}
+                                        <input type="checkbox" className="w-4 h-4" disabled={!isEditable}
                                           checked={checked}
                                           onChange={() => handleCheckboxStatusToggle(plan.id, taskKeyForLookup, (cb.id ?? cb.checkboxId ?? cb.label))}
                                         />
@@ -1250,14 +1778,15 @@ const TraineeMainDashboard = () => {
       {(() => {
         const todayPlans = submittedDayPlans.filter(plan => 
           moment(plan.date).isSame(moment(), 'day') &&
-          (plan.status === 'completed') // Only show EOD section if there are approved tasks
+          (plan.status === 'approved' || plan.status === 'pending' || plan.status === 'completed') // Show EOD section for approved, pending, or completed plans
         );
         return todayPlans.length > 0;
       })() && (() => {
         const todayPlan = submittedDayPlans.find(plan => 
           moment(plan.date).isSame(moment(), 'day') &&
-          plan.status === 'completed' // Only look for completed plans
+          (plan.status === 'approved' || plan.status === 'pending' || plan.status === 'completed') // Look for approved, pending, or completed plans
         );
+        const isApproved = todayPlan?.status === 'approved'; // Day plan is approved by trainer, waiting for EOD submission
         const isPending = todayPlan?.status === 'pending';
         const isCompleted = todayPlan?.status === 'completed';
         const isEodPending = todayPlan?.eodUpdate?.status === 'submitted' && todayPlan?.status === 'pending';
@@ -1295,12 +1824,17 @@ const TraineeMainDashboard = () => {
                     Pending Review
                   </span>
                 )}
+                {isApproved && !isEodPending && !isEodApproved && !isEodRejected && (
+                  <span className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-800">
+                    Day Plan Approved
+                  </span>
+                )}
                 {isCompleted && !isEodApproved && !isEodRejected && (
                   <span className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-800">
                     Approved
                   </span>
                 )}
-                {!isPending && !isCompleted && !isEodPending && !isEodApproved && !isEodRejected && (
+                {!isPending && !isCompleted && !isApproved && !isEodPending && !isEodApproved && !isEodRejected && (
                   <span className="px-3 py-1 text-sm rounded-full bg-gray-100 text-gray-800">
                     Not Submitted
                   </span>
@@ -1341,8 +1875,8 @@ const TraineeMainDashboard = () => {
               </div>
             )}
             
-            {/* Show input form only when not pending/completed/EOD pending/approved/rejected or when editing */}
-            {(!isPending && !isCompleted && !isEodPending && !isEodApproved && !isEodRejected && !isPendingInReview) || isEditingEod ? (
+            {/* Show input form when approved (ready for EOD submission), not pending/completed/EOD pending/approved/rejected, or when editing */}
+            {(isApproved || ((!isPending && !isCompleted && !isEodPending && !isEodApproved && !isEodRejected && !isPendingInReview) || isEditingEod)) ? (
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1356,6 +1890,25 @@ const TraineeMainDashboard = () => {
                     onChange={(e) => setEodStatus(prev => ({ ...prev, remarks: e.target.value }))}
                   />
                 </div>
+                {isApproved && (
+                  <button
+                    onClick={handleEodUpdate}
+                    disabled={isUpdatingEod}
+                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                  >
+                    {isUpdatingEod ? (
+                      <>
+                        <LuLoader className="w-4 h-4 animate-spin" />
+                        <span>Submitting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <LuCheck className="w-4 h-4" />
+                        <span>Submit EOD Update</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             ) : null}
 
@@ -1561,22 +2114,19 @@ const TraineeMainDashboard = () => {
     <DashboardLayout activeMenu="Dashboard">
       <div className="p-3 md:p-6 bg-gray-50 min-h-screen">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Trainee Dashboard</h1>
-          <p className="text-gray-600">Welcome back, {user?.name}! Manage your daily tasks and track your progress.</p>
-        </div>
+
 
         {/* Tab Navigation */}
         <div className="bg-white rounded-lg shadow-sm mb-6">
           <div className="border-b border-gray-200">
-            <nav className="flex space-x-8 px-6">
+            <nav className="flex space-x-8 px-8 h-12">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`cursor-pointerpy-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
+                    className={`cursor-pointer py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
                       activeTab === tab.id
                         ? 'border-blue-500 text-blue-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -1614,9 +2164,19 @@ const TraineeMainDashboard = () => {
                 const tKey = `${previewTaskPlan.id}-${idx}`;
                 const currentStatus = modalTaskStatuses[tKey] || '';
                 const currentRemarks = modalTaskRemarks[tKey] || '';
+                // Clean up nested titles: Extract only "Plan Title - Topic Name" format
+                let displayTitle = task.title;
+                if (previewTaskPlan.title && task.title.includes(' - ')) {
+                  const parts = task.title.split(' - ');
+                  if (parts[0] === previewTaskPlan.title && parts.length > 2) {
+                    displayTitle = `${previewTaskPlan.title} - ${parts[parts.length - 1]}`;
+                  } else if (parts.length > 2 && !task.title.startsWith(previewTaskPlan.title)) {
+                    displayTitle = parts[parts.length - 1];
+                  }
+                }
                 return (
                 <div key={idx} className="border rounded-lg p-3">
-                  <div className="font-medium text-sm">{task.title}</div>
+                  <div className="font-medium text-sm">{displayTitle}</div>
                   <div className="text-xs text-gray-600">Time: {task.timeAllocation}</div>
                   {/* Status radios */}
                   <div className="mt-2 flex items-center gap-4">
@@ -1712,42 +2272,157 @@ const TraineeMainDashboard = () => {
               </button>
             </div>
 
-            {/* Status Badge */}
-            <div className="mb-6">
-              <span className={`px-3 py-1 text-sm rounded-full ${
-                selectedDayPlan.status === 'draft' 
-                  ? 'bg-gray-100 text-gray-800'
-                  : selectedDayPlan.status === 'in_progress'
-                  ? 'bg-blue-100 text-blue-800'
-                  : selectedDayPlan.status === 'completed'
-                  ? 'bg-green-100 text-green-800'
-                  : selectedDayPlan.status === 'rejected'
-                  ? 'bg-red-100 text-red-800'
-                  : 'bg-yellow-100 text-yellow-800'
-              }`}>
-                {selectedDayPlan.status === 'draft' ? 'Draft' :
-                 selectedDayPlan.status === 'in_progress' ? 'In Progress' :
-                 selectedDayPlan.status === 'completed' ? 'Completed' :
-                 selectedDayPlan.status === 'rejected' ? 'Rejected' :
-                 selectedDayPlan.status}
-              </span>
+            {/* Status Badge and Total Hours */}
+            <div className="mb-6 flex items-center justify-between">
+              {(() => {
+                const displayStatus = getDisplayStatus(selectedDayPlan);
+                return (
+                  <span className={`px-3 py-1 text-sm rounded-full ${displayStatus.color}`}>
+                    {displayStatus.label}
+                  </span>
+                );
+              })()}
+              <div className="flex items-center space-x-2">
+                <LuClock className="w-4 h-4 text-gray-600" />
+                <span className="text-sm font-medium text-gray-700">
+                  Total Hours: <span className="text-blue-600">{calculateTotalHours(selectedDayPlan).toFixed(1)}</span>
+                </span>
+              </div>
             </div>
 
             {/* Tasks Section */}
             <div className="mb-6">
               <h4 className="text-md font-medium text-gray-900 mb-3">Tasks</h4>
               <div className="space-y-3">
-                {selectedDayPlan.tasks.map((task, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <h5 className="font-medium text-gray-900">{task.title}</h5>
-                      <span className="text-sm text-blue-600 font-medium">{task.timeAllocation}</span>
+                {selectedDayPlan.tasks.map((task, index) => {
+                  // Clean up nested titles: Extract only "Plan Title - Topic Name" format
+                  let displayTitle = task.title;
+                  if (selectedDayPlan.title && task.title.includes(' - ')) {
+                    const parts = task.title.split(' - ');
+                    // If we have the plan title and the title starts with it, extract just plan title + last topic
+                    if (parts[0] === selectedDayPlan.title && parts.length > 2) {
+                      // It's a nested path: "Plan Title - Parent - Child - Grandchild"
+                      // Show only: "Plan Title - Grandchild" (last part)
+                      displayTitle = `${selectedDayPlan.title} - ${parts[parts.length - 1]}`;
+                    } else if (parts.length > 2 && !task.title.startsWith(selectedDayPlan.title)) {
+                      // Old format without plan title prefix, but still nested
+                      // Show only the last part
+                      displayTitle = parts[parts.length - 1];
+                    }
+                  }
+                  
+                  const taskKey = `${selectedDayPlan.id}-${index}`;
+                  const currentStatus = taskStatuses[taskKey] || task.status || '';
+                  const currentRemarks = taskRemarks[taskKey] || task.remarks || '';
+                  const isEodApproved = selectedDayPlan.eodUpdate?.status === 'approved' && selectedDayPlan.status === 'completed';
+                  const isEditable = selectedDayPlan.status === 'approved' && !isEodApproved;
+                  
+                  return (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <h5 className="font-medium text-gray-900">{displayTitle}</h5>
+                        <span className="text-sm text-blue-600 font-medium">{task.timeAllocation}</span>
+                      </div>
+                      {task.description && (
+                        <p className="text-sm text-gray-600 mb-3">{task.description}</p>
+                      )}
+                      
+                      {/* EOD Status Selection - Only show when status is approved */}
+                      {isEditable && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Task Status <span className="text-red-500">*</span>
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="flex items-center space-x-2">
+                                <input 
+                                  type="radio" 
+                                  name={`view-status-${selectedDayPlan.id}-${index}`} 
+                                  value="completed" 
+                                  className="text-green-500"
+                                  checked={currentStatus === 'completed'}
+                                  onChange={() => handleTaskStatusChange(selectedDayPlan.id, index, 'completed', '')}
+                                />
+                                <span className="text-sm text-gray-700">Completed</span>
+                              </label>
+                              <label className="flex items-center space-x-2">
+                                <input 
+                                  type="radio" 
+                                  name={`view-status-${selectedDayPlan.id}-${index}`} 
+                                  value="in_progress" 
+                                  className="text-yellow-500"
+                                  checked={currentStatus === 'in_progress'}
+                                  onChange={() => handleTaskStatusChange(selectedDayPlan.id, index, 'in_progress', '')}
+                                />
+                                <span className="text-sm text-gray-700">In Progress</span>
+                              </label>
+                              <label className="flex items-center space-x-2">
+                                <input 
+                                  type="radio" 
+                                  name={`view-status-${selectedDayPlan.id}-${index}`} 
+                                  value="pending" 
+                                  className="text-red-500"
+                                  checked={currentStatus === 'pending'}
+                                  onChange={() => handleTaskStatusChange(selectedDayPlan.id, index, 'pending', '')}
+                                />
+                                <span className="text-sm text-gray-700">Pending</span>
+                              </label>
+                            </div>
+                          </div>
+                          
+                          {/* Remarks Field - Required for In Progress and Pending */}
+                          {(currentStatus === 'in_progress' || currentStatus === 'pending') && (
+                            <div className="mb-3">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Remarks/Blockers <span className="text-red-500">*</span>
+                              </label>
+                              <textarea
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                rows="2"
+                                placeholder="Add any remarks or blockers for this task"
+                                value={currentRemarks}
+                                onChange={(e) => handleTaskRemarksChange(selectedDayPlan.id, index, e.target.value)}
+                              />
+                            </div>
+                          )}
+                          
+                          {/* Show current status if already set */}
+                          {currentStatus && currentStatus !== 'completed' && (
+                            <div className="mt-2">
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                currentStatus === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {currentStatus === 'in_progress' ? '⏳ In Progress' : '⏸ Pending'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Show read-only status if EOD is approved */}
+                      {isEodApproved && currentStatus && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-3 py-1 text-sm font-medium rounded-full ${
+                              currentStatus === 'completed' ? 'bg-green-100 text-green-700' :
+                              currentStatus === 'in_progress' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {currentStatus === 'completed' ? '✓ Completed' :
+                               currentStatus === 'in_progress' ? '⏳ In Progress' :
+                               '⏸ Pending'}
+                            </span>
+                          </div>
+                          {currentRemarks && (
+                            <p className="text-sm text-gray-600 mt-2">{currentRemarks}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {task.description && (
-                      <p className="text-sm text-gray-600">{task.description}</p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -1779,6 +2454,68 @@ const TraineeMainDashboard = () => {
               </div>
             )}
 
+            {/* EOD Update Section - Show when status is approved */}
+            {selectedDayPlan.status === 'approved' && selectedDayPlan.eodUpdate?.status !== 'approved' && (
+              <div className="mb-6 border-t pt-6">
+                <h4 className="text-md font-medium text-gray-900 mb-4">End of Day Update</h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Overall Remarks
+                    </label>
+                    <textarea
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      rows="3"
+                      placeholder="Add any overall remarks about today's work"
+                      value={eodStatus.remarks}
+                      onChange={(e) => setEodStatus(prev => ({ ...prev, remarks: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Show submitted EOD update if exists */}
+            {selectedDayPlan.eodUpdate && selectedDayPlan.eodUpdate.status && (
+              <div className="mb-6 border-t pt-6">
+                <h4 className="text-md font-medium text-gray-900 mb-3">EOD Update</h4>
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">Status:</span>
+                    <span className={`ml-2 px-2 py-1 text-xs rounded-full ${
+                      selectedDayPlan.eodUpdate.status === 'approved' ? 'bg-green-100 text-green-800' :
+                      selectedDayPlan.eodUpdate.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                      'bg-orange-100 text-orange-800'
+                    }`}>
+                      {selectedDayPlan.eodUpdate.status === 'approved' ? 'Approved' :
+                       selectedDayPlan.eodUpdate.status === 'rejected' ? 'Rejected' :
+                       'Pending Review'}
+                    </span>
+                  </div>
+                  {selectedDayPlan.eodUpdate.overallRemarks && (
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">Overall Remarks:</span>
+                      <p className="text-sm text-gray-600 mt-1">{selectedDayPlan.eodUpdate.overallRemarks}</p>
+                    </div>
+                  )}
+                  {selectedDayPlan.eodUpdate.submittedAt && (
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">Submitted:</span>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {moment(selectedDayPlan.eodUpdate.submittedAt).format('MMM DD, YYYY h:mm A')}
+                      </p>
+                    </div>
+                  )}
+                  {selectedDayPlan.eodUpdate.reviewComments && (
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">Review Comments:</span>
+                      <p className="text-sm text-gray-600 mt-1">{selectedDayPlan.eodUpdate.reviewComments}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Submission Details */}
             <div className="border-t pt-4">
               <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
@@ -1800,6 +2537,141 @@ const TraineeMainDashboard = () => {
                 >
                   <LuPencil className="w-4 h-4" />
                   <span>Edit Plan</span>
+                </button>
+              )}
+              {selectedDayPlan.status === 'approved' && selectedDayPlan.eodUpdate?.status !== 'approved' && (
+                <button
+                  onClick={async () => {
+                    // Validate that all tasks have status selected
+                    let hasValidationError = false;
+                    const validationErrors = [];
+                    
+                    selectedDayPlan.tasks.forEach((task, index) => {
+                      const key = `${selectedDayPlan.id}-${index}`;
+                      const status = taskStatuses[key];
+                      const remarks = taskRemarks[key] || '';
+                      
+                      if (!status) {
+                        hasValidationError = true;
+                        validationErrors.push(`Task "${task.title}" - Please select a status`);
+                      } else if ((status === 'in_progress' || status === 'pending') && !remarks.trim()) {
+                        hasValidationError = true;
+                        validationErrors.push(`Task "${task.title}" - Remarks are required for In Progress and Pending status`);
+                      }
+                    });
+                    
+                    if (hasValidationError) {
+                      validationErrors.forEach(error => toast.error(error));
+                      return;
+                    }
+                    
+                    // Prepare task updates
+                    const taskUpdates = selectedDayPlan.tasks.map((task, index) => {
+                      const key = `${selectedDayPlan.id}-${index}`;
+                      return {
+                        planId: selectedDayPlan.id,
+                        taskIndex: index,
+                        taskTitle: task.title,
+                        status: taskStatuses[key],
+                        remarks: taskRemarks[key] || '',
+                        timeAllocation: task.timeAllocation
+                      };
+                    });
+                    
+                    // Prepare checkbox updates
+                    const checkboxUpdates = [];
+                    if (selectedDayPlan.checkboxes) {
+                      selectedDayPlan.tasks.forEach((task, index) => {
+                        const taskKeyForLookup = task.id ?? index;
+                        const possibleKeys = [String(task.id), task.id, String(index), index];
+                        let taskCheckboxes = null;
+                        for (const key of possibleKeys) {
+                          if (selectedDayPlan.checkboxes[key]) { 
+                            taskCheckboxes = selectedDayPlan.checkboxes[key]; 
+                            break; 
+                          }
+                        }
+                        if (!taskCheckboxes) return;
+                        const array = Array.isArray(taskCheckboxes) ? taskCheckboxes : Object.values(taskCheckboxes);
+                        array.forEach(cb => {
+                          const stateKey = `${selectedDayPlan.id}-${taskKeyForLookup}-${(cb.id ?? cb.checkboxId ?? cb.label)}`;
+                          const checked = !!checkboxStatuses[stateKey];
+                          checkboxUpdates.push({ 
+                            taskId: taskKeyForLookup, 
+                            checkboxId: (cb.id ?? cb.checkboxId ?? cb.label), 
+                            checked 
+                          });
+                        });
+                      });
+                    }
+                    
+                    setIsUpdatingEod(true);
+                    try {
+                      const requestData = {
+                        date: moment(selectedDayPlan.date).format('YYYY-MM-DD'),
+                        tasks: taskUpdates,
+                        checkboxes: checkboxUpdates,
+                        overallRemarks: eodStatus.remarks
+                      };
+                      
+                      const response = await axiosInstance.post('/api/trainee-dayplans/eod-update', requestData);
+                      
+                      if (response.data.success !== false) {
+                        toast.success('EOD update submitted successfully');
+                        setEodStatus(prev => ({ ...prev, submitted: true }));
+                        
+                        // Refresh day plans list
+                        try {
+                          const refreshResponse = await axiosInstance.get(API_PATHS.TRAINEE_DAY_PLANS.GET_ALL);
+                          if (refreshResponse.data.dayPlans) {
+                            const formattedPlans = refreshResponse.data.dayPlans.map(plan => ({
+                              id: plan._id,
+                              title: plan.title || '',
+                              date: plan.date,
+                              tasks: plan.tasks,
+                              topics: plan.topics || [],
+                              checkboxes: plan.checkboxes || {},
+                              submittedAt: plan.submittedAt,
+                              status: plan.status,
+                              eodUpdate: plan.eodUpdate,
+                              createdBy: plan.createdBy || 'trainee'
+                            }));
+                            setSubmittedDayPlans(formattedPlans);
+                            
+                            // Update selected day plan
+                            const updatedPlan = formattedPlans.find(p => p.id === selectedDayPlan.id);
+                            if (updatedPlan) {
+                              setSelectedDayPlan(updatedPlan);
+                            }
+                          }
+                        } catch (refreshError) {
+                          console.error('Error refreshing day plans:', refreshError);
+                        }
+                      }
+                    } catch (error) {
+                      if (error.response?.data?.message) {
+                        toast.error(error.response.data.message);
+                      } else {
+                        toast.error('Failed to submit EOD update. Please try again.');
+                      }
+                    } finally {
+                      setIsUpdatingEod(false);
+                    }
+                  }}
+                  disabled={isUpdatingEod}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {isUpdatingEod ? (
+                    <>
+                      <LuLoader className="w-4 h-4 animate-spin" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <LuCheck className="w-4 h-4" />
+                      <span>Submit EOD Update</span>
+                    </>
+                  )}
                 </button>
               )}
               <button

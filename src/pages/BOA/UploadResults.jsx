@@ -129,20 +129,7 @@ const UploadResults = () => {
                 Use the "Upload from Google Sheets" button above to upload results data directly from your Google Sheets.
                 The system will automatically match trainees by author_id and organize results by exam type.
               </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto">
-                <div className="flex items-start">
-                  <LuInfo className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
-                  <div className="text-sm text-blue-800">
-                    <p className="font-medium mb-1">How it works:</p>
-                    <ul className="list-disc list-inside space-y-1 text-left">
-                      <li>Click "Upload from Google Sheets"</li>
-                      <li>Provide your Google Sheets configuration</li>
-                      <li>System validates and matches by author_id</li>
-                      <li>Results are automatically organized by exam type</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
+
             </div>
           </div>
         </div>

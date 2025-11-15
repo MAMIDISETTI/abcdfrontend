@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { LuLogOut, LuUser, LuSettings } from 'react-icons/lu';
 import Cookies from 'js-cookie';
 import { useUserAuth } from '../../hooks/useUserAuth';
@@ -13,9 +13,34 @@ import MCQDeployments from './MCQDeployments';
 import CandidateDashboard from './CandidateDashboardSimple';
 
 const AdminLayout = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const location = useLocation();
   const navigate = useNavigate();
   const { user, clearUser } = useUserAuth();
+  
+  // Map URL paths to tab IDs
+  const pathToTabMap = {
+    '/admin/dashboard': 'dashboard',
+    '/admin/account-activation': 'account-activation',
+    '/admin/deactivated-users': 'deactivated-users',
+    '/admin/role-distribution': 'role-distribution',
+    '/admin/account-status': 'account-status',
+    '/admin/mcq-deployments': 'mcq-deployments',
+    '/admin/candidate-dashboard': 'candidate-dashboard',
+    '/admin/settings': 'settings'
+  };
+  
+  // Initialize activeTab based on current URL
+  const getActiveTabFromPath = (pathname) => {
+    return pathToTabMap[pathname] || 'dashboard';
+  };
+  
+  const [activeTab, setActiveTab] = useState(() => getActiveTabFromPath(location.pathname));
+  
+  // Sync activeTab with URL changes
+  useEffect(() => {
+    const tabFromPath = getActiveTabFromPath(location.pathname);
+    setActiveTab(tabFromPath);
+  }, [location.pathname]);
 
   const handleLogout = () => {
     // Clear all cookies
@@ -48,7 +73,7 @@ const AdminLayout = () => {
         return (
           <div className="p-6">
             <div className="mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
+              <h1 className="font-bold text-gray-900 mb-2">Settings</h1>
               <p className="text-gray-600">System configuration and preferences</p>
             </div>
             <div className="bg-white rounded-lg shadow p-6">
@@ -65,7 +90,26 @@ const AdminLayout = () => {
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
-      <AdminSidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
+      <AdminSidebar 
+        activeTab={activeTab} 
+        setActiveTab={(tabId) => {
+          setActiveTab(tabId);
+          // Update URL to match the selected tab
+          const tabToPathMap = {
+            'dashboard': '/admin/dashboard',
+            'account-activation': '/admin/account-activation',
+            'deactivated-users': '/admin/deactivated-users',
+            'role-distribution': '/admin/role-distribution',
+            'account-status': '/admin/account-status',
+            'mcq-deployments': '/admin/mcq-deployments',
+            'candidate-dashboard': '/admin/candidate-dashboard',
+            'settings': '/admin/settings'
+          };
+          const path = tabToPathMap[tabId] || '/admin/dashboard';
+          navigate(path, { replace: true });
+        }} 
+        onLogout={handleLogout} 
+      />
       
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">

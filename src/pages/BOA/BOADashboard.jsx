@@ -126,15 +126,40 @@ const BOADashboard = () => {
       // Filter for activated users (those with accounts created)
       const activatedUsersData = users
         .filter(user => user.accountCreated && user.role === 'trainee')
-        .map(user => ({
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          password: user.tempPassword || 'Generated Password',
-          passwordChanged: user.passwordChanged || false,
-          accountCreatedAt: user.accountCreatedAt,
-          department: user.department || 'N/A'
-        }))
+        .map(user => {
+          // Handle assignedTrainer - API populates it as object with name, email, author_id
+          let assignedTrainerName = null;
+          if (user.assignedTrainer) {
+            if (typeof user.assignedTrainer === 'object' && user.assignedTrainer !== null) {
+              // Populated object from API - check for name property
+              if (user.assignedTrainer.name) {
+                assignedTrainerName = user.assignedTrainer.name;
+              } else if (user.assignedTrainer.email) {
+                assignedTrainerName = user.assignedTrainer.email;
+              } else if (user.assignedTrainer.author_id) {
+                assignedTrainerName = user.assignedTrainer.author_id;
+              }
+            } else if (typeof user.assignedTrainer === 'string') {
+              // If it's a string ID, try to find the trainer name from the users list
+              const trainer = users.find(u => 
+                (u._id === user.assignedTrainer || u.author_id === user.assignedTrainer) && 
+                u.role === 'trainer'
+              );
+              assignedTrainerName = trainer ? trainer.name : null;
+            }
+          }
+          
+          return {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            password: user.tempPassword || 'Generated Password',
+            passwordChanged: user.passwordChanged || false,
+            accountCreatedAt: user.accountCreatedAt,
+            department: user.department || 'N/A',
+            assignedTrainer: assignedTrainerName
+          };
+        })
         .sort((a, b) => new Date(b.accountCreatedAt) - new Date(a.accountCreatedAt));
       
       setActivatedUsers(activatedUsersData);
@@ -997,7 +1022,7 @@ const BOADashboard = () => {
                 <LuSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
-                  placeholder="Search activated users by name, email, or department..."
+                  placeholder="Search activated users by name, email, department, or assigned trainer..."
                   value={credentialsSearchTerm}
                   onChange={(e) => setCredentialsSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
@@ -1007,11 +1032,15 @@ const BOADashboard = () => {
               {/* Credentials List */}
               <div className="max-h-96 overflow-y-auto scrollbar-thin">
                 {activatedUsers
-                  .filter(user => 
-                    user.name.toLowerCase().includes(credentialsSearchTerm.toLowerCase()) ||
-                    user.email.toLowerCase().includes(credentialsSearchTerm.toLowerCase()) ||
-                    user.department.toLowerCase().includes(credentialsSearchTerm.toLowerCase())
-                  )
+                  .filter(user => {
+                    const searchTerm = credentialsSearchTerm.toLowerCase();
+                    return (
+                      user.name.toLowerCase().includes(searchTerm) ||
+                      user.email.toLowerCase().includes(searchTerm) ||
+                      user.department.toLowerCase().includes(searchTerm) ||
+                      (user.assignedTrainer && user.assignedTrainer.toLowerCase().includes(searchTerm))
+                    );
+                  })
                   .map((user) => (
                     <div key={user.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
                       <div className="flex items-center justify-between">
@@ -1024,6 +1053,11 @@ const BOADashboard = () => {
                               <h4 className="font-medium text-gray-900">{user.name}</h4>
                               <p className="text-sm text-gray-600">{user.email}</p>
                               <p className="text-xs text-gray-500">{user.department}</p>
+                              {user.assignedTrainer && (
+                                <p className="text-xs text-blue-600 mt-1">
+                                  Assigned Trainer: {user.assignedTrainer}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </div>

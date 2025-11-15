@@ -7,15 +7,16 @@ import { API_PATHS } from '../utils/apiPaths';
 const UploadJoinersPopup = ({ isOpen, onClose, onSuccess }) => {
   const [step, setStep] = useState(1); // 1: JSON Input, 2: Validation, 3: Upload
   const [jsonData, setJsonData] = useState({});
-  const [googleSheetUrl, setGoogleSheetUrl] = useState(
-    import.meta.env.VITE_GOOGLE_SHEET_URL
-  );
+  
+  // Get the Google Sheet URL from environment variable
+  // Note: Vite only loads env vars at build/start time - restart dev server after .env changes
+  const googleSheetUrl = import.meta.env.VITE_GOOGLE_SHEET_URL || '';
 
-  // Log the environment variable for debugging
   const [joinersData, setJoinersData] = useState([]);
   const [validationResult, setValidationResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState([]);
+  const [dataFromSheets, setDataFromSheets] = useState(false); // Track if data came from sheets
 
   const handleJsonChange = (e) => {
     const value = e.target.value.trim();
@@ -51,30 +52,91 @@ const UploadJoinersPopup = ({ isOpen, onClose, onSuccess }) => {
     // Debug: Log the Google Sheet URL
 
     // Google Sheet URL is optional - if not provided, will work in direct mode
-    if (!googleSheetUrl) {
-      setErrors(['Google Sheet URL is not configured. Please create a .env file with VITE_GOOGLE_SHEET_URL']);
-      return;
-    }
+    // No need to block if googleSheetUrl is missing - backend supports direct mode
 
     setLoading(true);
     setErrors([]);
 
     try {
-      const response = await axiosInstance.post(API_PATHS.JOINERS.VALIDATE_SHEETS, {
+      const requestPayload = {
         spread_sheet_name: jsonData.spread_sheet_name,
         data_sets_to_be_loaded: jsonData.data_sets_to_be_loaded,
         google_sheet_url: googleSheetUrl || null // Use null if not available
+      };
+
+      // Debug: Log the request payload
+      console.log('Validating sheets with:', {
+        spread_sheet_name: requestPayload.spread_sheet_name,
+        data_sets_to_be_loaded: requestPayload.data_sets_to_be_loaded,
+        has_google_sheet_url: !!requestPayload.google_sheet_url,
+        google_sheet_url: requestPayload.google_sheet_url ? `${requestPayload.google_sheet_url.substring(0, 50)}...` : 'null'
+      });
+
+      const response = await axiosInstance.post(API_PATHS.JOINERS.VALIDATE_SHEETS, requestPayload);
+
+      // Debug: Log the response structure
+      console.log('Validation response:', response.data);
+      console.log('Response data structure:', {
+        hasResponseData: !!response.data,
+        hasData: !!response.data?.data,
+        sheetDataType: typeof response.data?.data,
+        isSheetDataArray: Array.isArray(response.data?.data),
+        sheetDataKeys: response.data?.data && typeof response.data.data === 'object' ? Object.keys(response.data.data) : null,
+        sheetDataDataLength: response.data?.data?.data?.length,
+        sheetDataDataType: typeof response.data?.data?.data
       });
 
       setValidationResult(response.data);
       
-      // If data is fetched from Google Sheets, populate the joiners data
-      if (response.data.data && response.data.data.data && response.data.data.data.length > 0) {
-        setJoinersData(response.data.data.data);
-        toast.success('Data fetched from Google Sheets successfully!');
+      // Extract data from Google Sheets response
+      // Response structure: { message: '...', data: sheetData }
+      // sheetData structure: { spread_sheet_name: '...', data_sets_to_be_loaded: [...], data: [...] }
+      let extractedData = null;
+      
+      if (response.data && response.data.data) {
+        const sheetData = response.data.data;
+        
+        console.log('Sheet data structure:', {
+          type: typeof sheetData,
+          isArray: Array.isArray(sheetData),
+          keys: typeof sheetData === 'object' && sheetData !== null ? Object.keys(sheetData) : null,
+          hasDataProperty: !!sheetData.data,
+          dataLength: sheetData.data?.length
+        });
+        
+        // Check if sheetData has a data property (array of joiners)
+        if (sheetData.data && Array.isArray(sheetData.data) && sheetData.data.length > 0) {
+          extractedData = sheetData.data;
+          console.log(`Extracted ${extractedData.length} records from sheetData.data`);
+        }
+        // Also check if sheetData itself is an array (alternative structure)
+        else if (Array.isArray(sheetData) && sheetData.length > 0) {
+          extractedData = sheetData;
+          console.log(`Extracted ${extractedData.length} records from sheetData (direct array)`);
+        } else {
+          console.warn('No data found in sheetData. Structure:', sheetData);
+        }
+      } else {
+        console.warn('No response.data or response.data.data found');
+      }
+      
+      if (extractedData && extractedData.length > 0) {
+        // Debug: Log first record to see the data structure
+        if (extractedData[0]) {
+          console.log('First extracted record:', JSON.stringify(extractedData[0], null, 2));
+          console.log('First record phone_number:', extractedData[0].phone_number);
+          console.log('First record keys:', Object.keys(extractedData[0]));
+        }
+        
+        setJoinersData(extractedData);
+        setDataFromSheets(true); // Mark that data came from sheets
+        toast.success(`Data fetched from Google Sheets successfully! Found ${extractedData.length} records.`);
       } else {
         // In direct mode, show message that user can add data manually
         toast.success('Configuration validated! You can now add joiners data manually.');
+        // Clear any existing dummy data
+        setJoinersData([]);
+        setDataFromSheets(false); // Mark that data didn't come from sheets
       }
       
       setStep(2);
@@ -140,9 +202,9 @@ const UploadJoinersPopup = ({ isOpen, onClose, onSuccess }) => {
   const handleClose = () => {
     setStep(1);
     setJsonData({});
-    setGoogleSheetUrl(import.meta.env.VITE_GOOGLE_SHEET_URL);
     setJoinersData([]);
     setValidationResult(null);
+    setDataFromSheets(false);
     setErrors([]);
     onClose();
   };
@@ -153,7 +215,18 @@ const UploadJoinersPopup = ({ isOpen, onClose, onSuccess }) => {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Step 1: JSON Configuration</h3>
         
         <div className="space-y-4">
-          {/* Google Sheet URL is now hidden and uses environment variable */}
+          {/* Google Sheet URL is loaded from .env file automatically */}
+          {!googleSheetUrl && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+              <div className="flex items-start space-x-2">
+                <LuInfo className="w-5 h-5 text-yellow-600 mt-0.5" />
+                <div className="text-sm text-yellow-800">
+                  <p className="font-medium">Google Sheet URL not configured</p>
+                  <p className="mt-1">To fetch data from Google Sheets, configure <code className="bg-yellow-100 px-1 rounded">VITE_GOOGLE_SHEET_URL</code> in your <code className="bg-yellow-100 px-1 rounded">.env</code> file and restart the dev server.</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -212,9 +285,9 @@ const UploadJoinersPopup = ({ isOpen, onClose, onSuccess }) => {
             value={joinersData.length > 0 ? JSON.stringify(joinersData, null, 2) : ''}
             onChange={handleJoinersDataChange}
             rows={12}
-            readOnly={joinersData.length > 0 && validationResult?.data?.data?.length > 0}
+            readOnly={joinersData.length > 0 && dataFromSheets}
             className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm ${
-              joinersData.length > 0 && validationResult?.data?.data?.length > 0 
+              joinersData.length > 0 && dataFromSheets
                 ? 'bg-gray-50 text-gray-600 cursor-not-allowed' 
                 : joinersData.length === 0 
                   ? 'border-blue-300 bg-blue-50' 

@@ -72,7 +72,6 @@ const DayPlanReport = () => {
             <h3 className="text-lg font-medium text-gray-900 mb-3">Trainee Information</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-gray-600">Name:</span><span>{plan?.trainee?.name || "N/A"}</span></div>
-              <div className="flex justify-between"><span className="text-gray-600">ID:</span><span>{plan?.trainee?._id || "N/A"}</span></div>
               <div className="flex justify-between"><span className="text-gray-600">Status:</span><span className="capitalize">{plan?.status}</span></div>
             </div>
           </div>

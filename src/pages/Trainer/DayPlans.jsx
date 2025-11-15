@@ -5,7 +5,7 @@ import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
 import moment from "moment";
 import { toast } from "react-hot-toast";
-import { LuPlus, LuPencil, LuTrash, LuEye, LuCalendar, LuClock, LuFileText, LuX, LuArrowRight } from "react-icons/lu";
+import { LuPlus, LuPencil, LuTrash, LuEye, LuCalendar, LuClock, LuFileText, LuX, LuArrowRight, LuSearch } from "react-icons/lu";
 
 const DayPlans = () => {
   const { user } = useContext(UserContext);
@@ -29,6 +29,7 @@ const DayPlans = () => {
   const [dateFilter, setDateFilter] = useState("");
   const [filteredTraineeDayPlans, setFilteredTraineeDayPlans] = useState([]);
   const [traineeCreatedDateFilter, setTraineeCreatedDateFilter] = useState("");
+  const [traineeCreatedSearchTerm, setTraineeCreatedSearchTerm] = useState("");
   const [filteredTraineeCreatedPlans, setFilteredTraineeCreatedPlans] = useState([]);
 
   // Form state
@@ -553,23 +554,109 @@ const DayPlans = () => {
     setFilteredTraineeDayPlans(traineeDayPlans);
   };
 
+  // Handle trainee created date filter and search
+  const applyTraineeCreatedFilters = () => {
+    let filtered = [...traineeDayPlans];
+
+    // Apply date filter
+    if (traineeCreatedDateFilter) {
+      filtered = filtered.filter(plan => 
+        moment(plan.date).format('YYYY-MM-DD') === traineeCreatedDateFilter
+      );
+    }
+
+    // Apply search filter
+    if (traineeCreatedSearchTerm.trim()) {
+      const searchLower = traineeCreatedSearchTerm.toLowerCase().trim();
+      filtered = filtered.filter(plan => {
+        // Search in trainee name
+        const traineeName = (plan.trainee?.name || '').toLowerCase();
+        // Search in plan title
+        const planTitle = (plan.title || '').toLowerCase();
+        // Search in date (formatted)
+        const dateStr = moment(plan.date).format('MMM DD, YYYY').toLowerCase();
+        // Search in status
+        const statusStr = (plan.status || '').toLowerCase();
+        // Search in submitted date
+        const submittedDate = plan.submittedAt 
+          ? moment(plan.submittedAt).format('MMM DD, YYYY h:mm A').toLowerCase()
+          : '';
+        
+        return traineeName.includes(searchLower) ||
+               planTitle.includes(searchLower) ||
+               dateStr.includes(searchLower) ||
+               statusStr.includes(searchLower) ||
+               submittedDate.includes(searchLower);
+      });
+    }
+
+    setFilteredTraineeCreatedPlans(filtered);
+  };
+
   // Handle trainee created date filter
   const handleTraineeCreatedDateFilter = (selectedDate) => {
     setTraineeCreatedDateFilter(selectedDate);
-    if (selectedDate) {
-      const filtered = traineeDayPlans.filter(plan => 
-        moment(plan.date).format('YYYY-MM-DD') === selectedDate
-      );
-      setFilteredTraineeCreatedPlans(filtered);
-    } else {
-      setFilteredTraineeCreatedPlans(traineeDayPlans);
-    }
+    // Apply filters will be called via useEffect
+  };
+
+  // Handle trainee created search
+  const handleTraineeCreatedSearch = (searchTerm) => {
+    setTraineeCreatedSearchTerm(searchTerm);
+    // Apply filters will be called via useEffect
   };
 
   // Clear trainee created date filter
   const clearTraineeCreatedDateFilter = () => {
     setTraineeCreatedDateFilter("");
-    setFilteredTraineeCreatedPlans(traineeDayPlans);
+    // Apply filters will be called via useEffect
+  };
+
+  // Clear trainee created search
+  const clearTraineeCreatedSearch = () => {
+    setTraineeCreatedSearchTerm("");
+    // Apply filters will be called via useEffect
+  };
+
+  // Helper function to calculate total hours from a plan
+  const calculatePlanTotalHours = (plan) => {
+    const parse = (s) => { 
+      if(!s) return null; 
+      // Try 12-hour format first: "9:00am-11:00am"
+      let m = s.match(/(\d{1,2}):(\d{2})(am|pm)[–-](\d{1,2}):(\d{2})(am|pm)/i); 
+      if(m) {
+        const toMin = (h, mm, ap) => {
+          let hh = parseInt(h, 10) % 12; 
+          if(ap.toLowerCase() === 'pm') hh += 12; 
+          return hh * 60 + parseInt(mm, 10);
+        }; 
+        return {start: toMin(m[1], m[2], m[3]), end: toMin(m[4], m[5], m[6])}; 
+      }
+      // Try 24-hour format: "9:00-11:00"
+      m = s.match(/(\d{1,2}):(\d{2})[–-](\d{1,2}):(\d{2})/);
+      if(m) {
+        const toMin = (h, mm) => parseInt(h, 10) * 60 + parseInt(mm, 10);
+        return {start: toMin(m[1], m[2]), end: toMin(m[3], m[4])};
+      }
+      return null;
+    };
+    
+    let minutes = 0; 
+    (plan.tasks || []).forEach(t => { 
+      const r = parse(t.timeAllocation); 
+      if(r) minutes += Math.max(0, r.end - r.start); 
+    });
+    if (plan.checkboxes) { 
+      const groups = Array.isArray(plan.checkboxes) ? [] : Object.values(plan.checkboxes); 
+      groups.forEach(g => { 
+        const arr = Array.isArray(g) ? g : Object.values(g); 
+        arr.forEach(cb => { 
+          const r = parse(cb.timeAllocation); 
+          if(r) minutes += Math.max(0, r.end - r.start); 
+        }); 
+      }); 
+    }
+    
+    return minutes / 60; // Return hours as decimal
   };
 
   useEffect(() => {
@@ -588,6 +675,12 @@ const DayPlans = () => {
     };
     loadData();
   }, []);
+
+  // Apply filters when date filter, search term, or traineeDayPlans changes
+  useEffect(() => {
+    applyTraineeCreatedFilters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [traineeCreatedDateFilter, traineeCreatedSearchTerm, traineeDayPlans]);
 
   if (loading) {
     return (
@@ -639,28 +732,56 @@ const DayPlans = () => {
             <h3 className="text-lg font-medium">Trainee Created Day Plans</h3>
           </div>
 
-          {/* Date Filter Section */}
+          {/* Search and Date Filter Section */}
           <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <label className="text-sm font-medium text-gray-700">Filter by Date:</label>
-                <input
-                  type="date"
-                  value={traineeCreatedDateFilter}
-                  onChange={(e) => handleTraineeCreatedDateFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                {traineeCreatedDateFilter && (
+            <div className="space-y-4">
+              {/* Search Filter */}
+
+              
+              {/* Date Filter */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <label className="text-sm font-medium text-gray-700">Filter by Date:</label>
+                  <input
+                    type="date"
+                    value={traineeCreatedDateFilter}
+                    onChange={(e) => handleTraineeCreatedDateFilter(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {traineeCreatedDateFilter && (
+                    <button
+                      onClick={clearTraineeCreatedDateFilter}
+                      className="cursor-pointer px-3 py-2 text-sm text-gray-600 hover:text-gray-800 bg-white border border-gray-300 rounded-md hover:bg-gray-50 flex items-center space-x-1"
+                    >
+                      <LuX className="w-4 h-4" />
+                      <span>Clear</span>
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center space-x-4">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    value={traineeCreatedSearchTerm}
+                    onChange={(e) => handleTraineeCreatedSearch(e.target.value)}
+                    placeholder="Search by trainee name, plan title, date, status..."
+                    className="w-full px-3 py-2 pl-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <LuSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                </div>
+                {traineeCreatedSearchTerm && (
                   <button
-                    onClick={clearTraineeCreatedDateFilter}
-                    className="cursor-pointer px-3 py-2 text-sm text-gray-600 hover:text-gray-800 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                    onClick={clearTraineeCreatedSearch}
+                    className="cursor-pointer px-3 py-2 text-sm text-gray-600 hover:text-gray-800 bg-white border border-gray-300 rounded-md hover:bg-gray-50 flex items-center space-x-1"
                   >
-                    Clear Filter
+                    <LuX className="w-4 h-4" />
+                    <span>Clear</span>
                   </button>
                 )}
               </div>
-              <div className="text-sm text-gray-600">
-                Showing {filteredTraineeCreatedPlans.length} of {traineeDayPlans.length} plans
+                <div className="text-sm text-gray-600">
+                  Showing {filteredTraineeCreatedPlans.length} of {traineeDayPlans.length} plans
+                </div>
               </div>
             </div>
           </div>
@@ -669,15 +790,29 @@ const DayPlans = () => {
             <div className="text-center py-8">
               <LuFileText className="mx-auto text-4xl text-gray-400 mb-2" />
               <p className="text-gray-500">
-                {traineeCreatedDateFilter ? `No day plans found for ${moment(traineeCreatedDateFilter).format('MMM DD, YYYY')}` : 'No trainee day plans submitted yet'}
+                {traineeCreatedDateFilter || traineeCreatedSearchTerm 
+                  ? `No day plans found matching your filters${traineeCreatedDateFilter ? ` for ${moment(traineeCreatedDateFilter).format('MMM DD, YYYY')}` : ''}${traineeCreatedSearchTerm ? ` with "${traineeCreatedSearchTerm}"` : ''}`
+                  : 'No trainee day plans submitted yet'}
               </p>
-              {traineeCreatedDateFilter && (
-                <button
-                  onClick={clearTraineeCreatedDateFilter}
-                  className="cursor-pointer mt-2 text-blue-600 hover:text-blue-800 text-sm"
-                >
-                  Clear date filter
-                </button>
+              {(traineeCreatedDateFilter || traineeCreatedSearchTerm) && (
+                <div className="mt-4 flex items-center justify-center space-x-2">
+                  {traineeCreatedDateFilter && (
+                    <button
+                      onClick={clearTraineeCreatedDateFilter}
+                      className="cursor-pointer px-3 py-1 text-sm text-blue-600 hover:text-blue-800 bg-blue-50 rounded-md hover:bg-blue-100"
+                    >
+                      Clear date filter
+                    </button>
+                  )}
+                  {traineeCreatedSearchTerm && (
+                    <button
+                      onClick={clearTraineeCreatedSearch}
+                      className="cursor-pointer px-3 py-1 text-sm text-blue-600 hover:text-blue-800 bg-blue-50 rounded-md hover:bg-blue-100"
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           ) : (
@@ -692,24 +827,54 @@ const DayPlans = () => {
                   >
                     <div className="flex-1">
                       <h4 className="font-medium">
-                        {plan.trainee?.name || 'Unknown Trainee'} - {moment(plan.date).format('MMM DD, YYYY')}
+                        {plan.title && plan.title.trim() ? (
+                          <>
+                            {plan.title} - {plan.trainee?.name || 'Unknown Trainee'} - {moment(plan.date).format('MMM DD, YYYY')}
+                          </>
+                        ) : (
+                          <>
+                            {plan.trainee?.name || 'Unknown Trainee'} - {moment(plan.date).format('MMM DD, YYYY')}
+                          </>
+                        )}
                       </h4>
-                      <p className="text-sm text-gray-600">
-                        {plan.tasks?.length || 0} tasks • Status: 
-                        <span className={`ml-1 px-2 py-1 rounded-full text-xs ${
-                          plan.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                          plan.status === 'completed' ? 'bg-green-100 text-green-800' :
-                          plan.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                          plan.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {plan.status === 'in_progress' ? 'In Progress' :
-                           plan.status === 'completed' ? '✓ Accepted' :
-                           plan.status === 'rejected' ? '✗ Rejected' :
-                           plan.status === 'pending' ? 'Pending' :
-                           plan.status || 'Draft'}
-                        </span>
-                      </p>
+                      <div className="flex items-center justify-center space-x-4">
+                        <p className="text-sm text-gray-600">
+                          {plan.tasks?.length || 0} tasks • Status: 
+                          <span className={`ml-1 px-2 py-1 rounded-full text-xs ${
+                            plan.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                            plan.status === 'completed' ? 'bg-green-100 text-green-800' :
+                            plan.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                            plan.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {plan.status === 'in_progress' ? 'In Progress' :
+                             plan.status === 'completed' ? '✓ Accepted' :
+                             plan.status === 'rejected' ? '✗ Rejected' :
+                             plan.status === 'pending' ? 'Pending' :
+                             plan.status || 'Draft'}
+                          </span>
+                        </p>
+                        {(() => {
+                          const totalHours = calculatePlanTotalHours(plan);
+                          const hours = Math.floor(totalHours);
+                          const minutes = Math.round((totalHours - hours) * 60);
+                          const hoursDisplay = minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+                          
+                          // Color coding: >8h = green, 7-8h = yellow/orange, <7h = red
+                          let hoursColorClass = 'text-red-600 font-semibold';
+                          if (totalHours > 8) {
+                            hoursColorClass = 'text-green-600 font-semibold';
+                          } else if (totalHours >= 7 && totalHours <= 8) {
+                            hoursColorClass = 'text-yellow-600 font-semibold';
+                          }
+                          
+                          return (
+                            <span className={`text-sm ${hoursColorClass}`}>
+                              {hoursDisplay}
+                            </span>
+                          );
+                        })()}
+                      </div>
                       <p className="text-xs text-gray-500">
                         Submitted: {plan.submittedAt ? moment(plan.submittedAt).format('MMM DD, YYYY h:mm A') : 'Not submitted'}
                       </p>
@@ -1322,35 +1487,57 @@ const DayPlans = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Tasks</label>
                 <div className="space-y-3">
                   {selectedTraineePlan.tasks && selectedTraineePlan.tasks.length > 0 ? (
-                    selectedTraineePlan.tasks.map((task, index) => (
+                    selectedTraineePlan.tasks.map((task, index) => {
+                      // Clean up nested titles for display
+                      let displayTitle = task.title;
+                      if (selectedTraineePlan.title && task.title.includes(' - ')) {
+                        const parts = task.title.split(' - ');
+                        if (parts[0] === selectedTraineePlan.title && parts.length > 2) {
+                          displayTitle = `${selectedTraineePlan.title} - ${parts[parts.length - 1]}`;
+                        } else if (parts.length > 2 && !task.title.startsWith(selectedTraineePlan.title)) {
+                          displayTitle = parts[parts.length - 1];
+                        }
+                      }
+                      return (
                     <div key={index} className="border rounded-lg p-3">
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
-                          <h4 className="font-medium text-sm">{task.title}</h4>
+                          <h4 className="font-medium text-sm">{displayTitle}</h4>
                           <p className="text-sm text-gray-600 mt-1">{task.description}</p>
                           <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                             <span>Time: {task.timeAllocation}</span>
-                            {task.status && (
-                              <span className={`px-2 py-1 rounded ${
-                                task.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                                task.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {task.status === 'completed' ? 'Completed' :
-                                 task.status === 'in_progress' ? 'In Progress' :
-                                 task.status === 'pending' ? 'Pending' :
-                                 task.status}
-                              </span>
-                            )}
                           </div>
-                          {task.remarks && (
-                            <p className="text-xs text-gray-600 mt-1">Remarks: {task.remarks}</p>
+                        </div>
+                        {/* Task Completion Status - Prominent Display */}
+                        <div className="ml-4">
+                          {task.status ? (
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              task.status === 'completed' ? 'bg-green-100 text-green-800' :
+                              task.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                              task.status === 'pending' ? 'bg-orange-100 text-orange-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {task.status === 'completed' ? '✓ Completed' :
+                               task.status === 'in_progress' ? '⏳ In Progress' :
+                               task.status === 'pending' ? '⏸ Pending' :
+                               task.status}
+                            </span>
+                          ) : (
+                            <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                              Not Started
+                            </span>
                           )}
                         </div>
                       </div>
+                      {/* Task Remarks - Prominent Display */}
+                      {task.remarks && (
+                        <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-700 border-l-2 border-blue-300">
+                          <span className="font-medium">Remarks:</span> {task.remarks}
+                        </div>
+                      )}
                     </div>
-                    ))
+                    );
+                    })
                   ) : (
                     <div className="text-center py-4 text-gray-500">
                       <p className="text-sm">No tasks assigned</p>
@@ -1622,20 +1809,103 @@ const DayPlans = () => {
               <div> Status: <span className="font-medium">{previewPlan.status}</span></div>
             </div>
             {(() => {
-              const parse = (s) => { if(!s) return null; const m=s.match(/(\d{1,2}):(\d{2})(am|pm)[–-](\d{1,2}):(\d{2})(am|pm)/i); if(!m) return null; const toMin=(h,mm,ap)=>{let hh=parseInt(h,10)%12; if(ap.toLowerCase()==='pm') hh+=12; return hh*60+parseInt(mm,10);}; return {start:toMin(m[1],m[2],m[3]), end:toMin(m[4],m[5],m[6])}; };
-              let minutes=0; (previewPlan.tasks||[]).forEach(t=>{ const r=parse(t.timeAllocation); if(r) minutes+=Math.max(0,r.end-r.start); });
-              if (previewPlan.checkboxes){ const groups = Array.isArray(previewPlan.checkboxes)?[]:Object.values(previewPlan.checkboxes); groups.forEach(g=>{ const arr=Array.isArray(g)?g:Object.values(g); arr.forEach(cb=>{ const r=parse(cb.timeAllocation); if(r) minutes+=Math.max(0,r.end-r.start); }); }); }
-              const hrs=Math.floor(minutes/60), mins=minutes%60;
+              // Parse time range - supports both "9:00-11:00" (24-hour) and "9:00am-11:00am" (12-hour) formats
+              const parse = (s) => { 
+                if(!s) return null; 
+                // Try 12-hour format first: "9:00am-11:00am"
+                let m = s.match(/(\d{1,2}):(\d{2})(am|pm)[–-](\d{1,2}):(\d{2})(am|pm)/i); 
+                if(m) {
+                  const toMin = (h, mm, ap) => {
+                    let hh = parseInt(h, 10) % 12; 
+                    if(ap.toLowerCase() === 'pm') hh += 12; 
+                    return hh * 60 + parseInt(mm, 10);
+                  }; 
+                  return {start: toMin(m[1], m[2], m[3]), end: toMin(m[4], m[5], m[6])}; 
+                }
+                // Try 24-hour format: "9:00-11:00"
+                m = s.match(/(\d{1,2}):(\d{2})[–-](\d{1,2}):(\d{2})/);
+                if(m) {
+                  const toMin = (h, mm) => parseInt(h, 10) * 60 + parseInt(mm, 10);
+                  return {start: toMin(m[1], m[2]), end: toMin(m[3], m[4])};
+                }
+                return null;
+              };
+              let minutes = 0; 
+              (previewPlan.tasks || []).forEach(t => { 
+                const r = parse(t.timeAllocation); 
+                if(r) minutes += Math.max(0, r.end - r.start); 
+              });
+              if (previewPlan.checkboxes) { 
+                const groups = Array.isArray(previewPlan.checkboxes) ? [] : Object.values(previewPlan.checkboxes); 
+                groups.forEach(g => { 
+                  const arr = Array.isArray(g) ? g : Object.values(g); 
+                  arr.forEach(cb => { 
+                    const r = parse(cb.timeAllocation); 
+                    if(r) minutes += Math.max(0, r.end - r.start); 
+                  }); 
+                }); 
+              }
+              const hrs = Math.floor(minutes / 60), mins = minutes % 60;
               return (<div className="flex items-center justify-between rounded bg-gray-50 border p-2 mb-4"><span className="text-sm text-gray-700 font-medium">Total Planned Time</span><span className="text-sm text-gray-900 font-semibold">{hrs}h {mins}m</span></div>);
             })()}
             <div className="space-y-2">
-              {(previewPlan.tasks||[]).map((task,idx)=> (
+              {(previewPlan.tasks||[]).map((task,idx)=> {
+                // Clean up nested titles: Extract only "Plan Title - Topic Name" format
+                // If title has multiple " - " separators, it's likely a nested path
+                // Extract the plan title (first part) and the last part (actual topic name)
+                const taskStatus = task.status || '';
+                const taskRemarks = task.remarks || '';
+                let displayTitle = task.title;
+                if (previewPlan.title && task.title.includes(' - ')) {
+                  const parts = task.title.split(' - ');
+                  // If we have the plan title and the title starts with it, extract just plan title + last topic
+                  if (parts[0] === previewPlan.title && parts.length > 2) {
+                    // It's a nested path: "Plan Title - Parent - Child - Grandchild"
+                    // Show only: "Plan Title - Grandchild" (last part)
+                    displayTitle = `${previewPlan.title} - ${parts[parts.length - 1]}`;
+                  } else if (parts.length > 2 && !task.title.startsWith(previewPlan.title)) {
+                    // Old format without plan title prefix, but still nested
+                    // Show only the last part
+                    displayTitle = parts[parts.length - 1];
+                  }
+                }
+                return (
                 <div key={idx} className="border rounded-lg p-3">
-                  <div className="font-medium text-sm">{task.title}</div>
-                  <div className="text-xs text-gray-600">Time: {task.timeAllocation}</div>
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="font-medium text-sm">{displayTitle}</div>
+                      <div className="text-xs text-gray-600 mt-1">Time: {task.timeAllocation}</div>
+                    </div>
+                    {/* Task Completion Status */}
+                    {taskStatus && (
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ml-2 ${
+                        taskStatus === 'completed' ? 'bg-green-100 text-green-800' :
+                        taskStatus === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                        taskStatus === 'pending' ? 'bg-orange-100 text-orange-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {taskStatus === 'completed' ? '✓ Completed' :
+                         taskStatus === 'in_progress' ? '⏳ In Progress' :
+                         taskStatus === 'pending' ? '⏸ Pending' :
+                         taskStatus}
+                      </span>
+                    )}
+                    {!taskStatus && (
+                      <span className="px-2 py-1 rounded-full text-xs font-medium ml-2 bg-gray-100 text-gray-500">
+                        Not Started
+                      </span>
+                    )}
+                  </div>
+                  {/* Task Remarks */}
+                  {taskRemarks && (
+                    <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-700">
+                      <span className="font-medium">Remarks:</span> {taskRemarks}
+                    </div>
+                  )}
                   {(() => { const possibleKeys=[idx,String(idx),task.id,task.id?.toString()]; let tcb=null; if(previewPlan.checkboxes){ for(const k of possibleKeys){ if(previewPlan.checkboxes[k]){ tcb=previewPlan.checkboxes[k]; break; } } } if(!tcb) return null; const arr=Array.isArray(tcb)?tcb:Object.values(tcb); if(arr.length===0) return null; return (<div className="mt-2"><div className="text-sm font-medium text-gray-700 mb-1">Additional Activities</div>{arr.map((cb,i)=>(<div key={i} className="flex items-center gap-2 p-2 border rounded mb-2 bg-gray-50"><input type="checkbox" readOnly checked={!!cb.checked} className="rounded"/><span className="text-sm">{cb.label}</span>{cb.timeAllocation && <span className="text-xs text-gray-500">({cb.timeAllocation})</span>}</div>))}</div>); })()}
                 </div>
-              ))}
+              );
+              })}
             </div>
             {/* Actions */}
             <div className="flex justify-between items-center mt-4 pt-3 border-t">

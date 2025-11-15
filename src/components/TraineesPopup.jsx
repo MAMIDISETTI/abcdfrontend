@@ -100,16 +100,9 @@ const TraineesPopup = ({ isOpen, onClose, trainees = [], title = "Total Trainees
 
                   {/* Trainee Details */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <h3 className="text-sm font-semibold text-gray-900 truncate">
-                        {trainee.name || 'Unknown Name'}
-                      </h3>
-                      {trainee.employeeId && (
-                        <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
-                          ID: {trainee.employeeId}
-                        </span>
-                      )}
-                    </div>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-1 truncate">
+                      {trainee.name || 'Unknown Name'}
+                    </h3>
                     
                     <div className="flex items-center space-x-1 text-xs text-gray-600 mb-1">
                       <LuMail className="w-3 h-3" />

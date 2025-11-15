@@ -128,8 +128,10 @@ const TrainerDemoManagement = () => {
       if (demosResponse.data.success && demosResponse.data.demos) {
         // Filter demos that need review by this trainer
         const pendingDemos = demosResponse.data.demos.filter(demo => {
-          // Regular demos that are under review and assigned to this trainer
-          const isUnderReview = demo.status === 'under_review';
+          // Regular demos that are under review and NOT yet reviewed by this trainer
+          // Check that trainerStatus is not already set (approved/rejected)
+          const isUnderReview = demo.status === 'under_review' && 
+            !demo.trainerStatus; // Only show if trainer hasn't reviewed yet
           
           // Offline demos created by this trainer that are pending approval
           const isPendingOfflineDemo = demo.type === 'offline_demo' && 
@@ -712,7 +714,7 @@ const TrainerDemoManagement = () => {
       <div className="p-3 md:p-6 bg-gray-50 min-h-screen">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Demo Management</h1>
+          <h1 className="font-bold text-gray-900 mb-2">Demo Management</h1>
           <p className="text-gray-600">Review trainee demos and manage your reviewed demos</p>
         </div>
 

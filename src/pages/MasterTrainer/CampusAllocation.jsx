@@ -18,6 +18,7 @@ import {
   LuTrash2,
   LuLoader
 } from 'react-icons/lu';
+import { toast } from 'react-hot-toast';
 
 const CampusAllocation = () => {
   const { user } = useContext(UserContext);
@@ -27,13 +28,30 @@ const CampusAllocation = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [selectedTrainee, setSelectedTrainee] = useState(null);
+  const [selectedTrainees, setSelectedTrainees] = useState([]);
   const [selectedCampus, setSelectedCampus] = useState('');
   const [allocationDate, setAllocationDate] = useState('');
   const [showAllocationModal, setShowAllocationModal] = useState(false);
   const [showCampusModal, setShowCampusModal] = useState(false);
   const [newCampus, setNewCampus] = useState({ name: '', location: '', capacity: '' });
   const [isAllocating, setIsAllocating] = useState(false);
+  const [traineeSearchTerm, setTraineeSearchTerm] = useState('');
+
+  const getTraineeKey = (trainee) => {
+    if (!trainee) return '';
+    const candidates = [trainee.author_id, trainee._id, trainee.id];
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      if (typeof candidate === 'string' || typeof candidate === 'number') {
+        return String(candidate);
+      }
+      if (typeof candidate === 'object' && typeof candidate.toString === 'function') {
+        const value = candidate.toString();
+        if (value && value !== '[object Object]') return value;
+      }
+    }
+    return '';
+  };
 
   useEffect(() => {
     fetchTrainees();
@@ -219,29 +237,63 @@ const CampusAllocation = () => {
   };
 
   const handleAllocateCampus = async () => {
-    if (!selectedTrainee || !selectedCampus || !allocationDate) return;
+    if (!selectedTrainees.length || !selectedCampus || !allocationDate) {
+      toast.error('Select at least one trainee, a campus, and allocation date');
+      return;
+    }
 
     try {
       setIsAllocating(true);
 
-      const response = await axiosInstance.post(API_PATHS.ALLOCATION.CREATE, {
-        traineeId: selectedTrainee.author_id || selectedTrainee._id || selectedTrainee.id,
-        campusId: selectedCampus,
-        allocatedDate: allocationDate,
-        status: 'confirmed'
+      const allocationPromises = selectedTrainees.map((traineeKey) => {
+        const normalizedKey = String(traineeKey);
+        const trainee = trainees.find((t) => getTraineeKey(t) === normalizedKey);
+
+        let resolvedId = trainee?.author_id || trainee?._id || trainee?.id;
+        if (resolvedId && typeof resolvedId === 'object' && typeof resolvedId.toString === 'function') {
+          resolvedId = resolvedId.toString();
+        }
+        if (!resolvedId) {
+          return Promise.resolve({ success: false, traineeKey: normalizedKey });
+        }
+
+        return axiosInstance
+          .post(API_PATHS.ALLOCATION.CREATE, {
+            traineeId: resolvedId,
+            campusId: selectedCampus,
+            allocatedDate: allocationDate,
+            status: 'confirmed'
+          })
+          .then((res) => ({ success: res.data?.success, traineeKey: normalizedKey }))
+          .catch((error) => {
+            console.error('Error allocating campus:', error);
+            return { success: false, traineeKey: normalizedKey, error };
+          });
       });
 
-      if (response.data.success) {
-        fetchTrainees();
-        fetchAllocations();
-        setShowAllocationModal(false);
-        setSelectedTrainee(null);
-        setSelectedCampus('');
-        setAllocationDate('');
+      const results = await Promise.all(allocationPromises);
+      const successCount = results.filter((result) => result.success).length;
+      const failureCount = results.length - successCount;
+
+      if (successCount) {
+        toast.success(
+          `Allocated campus to ${successCount} trainee${successCount > 1 ? 's' : ''}`
+        );
       }
+
+      if (failureCount) {
+        toast.error(
+          `${failureCount} allocation${failureCount > 1 ? 's' : ''} failed. Please review and retry.`
+        );
+      }
+
+      await fetchTrainees();
+      await fetchAllocations();
+      closeAllocationModal();
     } catch (error) {
       const message = error?.response?.data?.message || 'Failed to create allocation';
       console.error('Error allocating campus:', message);
+      toast.error(message);
     }
     finally {
       setIsAllocating(false);
@@ -275,6 +327,42 @@ const CampusAllocation = () => {
     }
   };
 
+  const openAllocationModal = (initialTraineeIds = []) => {
+    const normalized = Array.from(
+      new Set(
+        initialTraineeIds
+          .map((id) => (id ? String(id) : ''))
+          .filter(Boolean)
+      )
+    );
+    setSelectedTrainees(normalized);
+    setSelectedCampus('');
+    setAllocationDate('');
+    setTraineeSearchTerm('');
+    setShowAllocationModal(true);
+  };
+
+  const closeAllocationModal = () => {
+    setShowAllocationModal(false);
+    setSelectedTrainees([]);
+    setSelectedCampus('');
+    setAllocationDate('');
+    setTraineeSearchTerm('');
+  };
+
+  const handleAddTraineeSelection = (trainee) => {
+    const normalized = getTraineeKey(trainee);
+    if (!normalized) return;
+    setSelectedTrainees((prev) =>
+      prev.includes(normalized) ? prev : [...prev, normalized]
+    );
+  };
+
+  const handleRemoveSelectedTrainee = (traineeId) => {
+    const normalized = String(traineeId);
+    setSelectedTrainees((prev) => prev.filter((id) => id !== normalized));
+  };
+
   const filteredTrainees = trainees.filter(trainee => {
     const traineeName = (trainee?.name || '').toLowerCase();
     const empId = (trainee?.employeeId || '').toLowerCase();
@@ -285,6 +373,61 @@ const CampusAllocation = () => {
                          (filterStatus === 'allocated' && isAllocated) ||
                          (filterStatus === 'unallocated' && !isAllocated);
     return matchesSearch && matchesFilter;
+  });
+
+  const selectedTraineeDetails = selectedTrainees
+    .map((id) => {
+      const normalizedId = String(id);
+      const trainee = trainees.find((t) => getTraineeKey(t) === normalizedId);
+      return trainee ? { ...trainee, __selectionId: normalizedId } : null;
+    })
+    .filter(Boolean);
+
+  const modalFilteredTrainees = trainees.filter((trainee) => {
+    const key = getTraineeKey(trainee);
+    if (!key || trainee?.allocatedCampus) return false;
+    const term = traineeSearchTerm.trim().toLowerCase();
+    const matchesTerm =
+      !term ||
+      (trainee.name || '').toLowerCase().includes(term) ||
+      (trainee.employeeId || '').toLowerCase().includes(term) ||
+      (trainee.email || '').toLowerCase().includes(term);
+    const alreadySelected = selectedTrainees.includes(key);
+    return matchesTerm && !alreadySelected;
+  });
+
+  const campusAllocationCounts = allocations.reduce((acc, allocation) => {
+    const campusKey =
+      allocation.campusId ||
+      allocation.campus?._id ||
+      allocation.campus?.id;
+    if (!campusKey) return acc;
+    const keyString = String(campusKey);
+    acc[keyString] = (acc[keyString] || 0) + 1;
+    return acc;
+  }, {});
+
+  const campusesWithUsage = campuses.map((campus) => {
+    const campusKey = campus._id || campus.id || campus.campusId;
+    const keyString = campusKey ? String(campusKey) : null;
+    const capacity = Number(campus.capacity) || 0;
+    const allocatedFromMap = keyString ? campusAllocationCounts[keyString] || 0 : 0;
+    const providedAllocations =
+      campus.currentAllocations !== undefined && campus.currentAllocations !== null
+        ? Number(campus.currentAllocations)
+        : undefined;
+    const safeAllocated = Number.isFinite(providedAllocations)
+      ? providedAllocations
+      : allocatedFromMap;
+    const utilisation =
+      capacity > 0 ? Math.min((safeAllocated / capacity) * 100, 100) : 0;
+
+    return {
+      ...campus,
+      capacity,
+      allocatedCount: safeAllocated,
+      utilisation,
+    };
   });
 
   const getStatusColor = (status) => {
@@ -303,7 +446,7 @@ const CampusAllocation = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Campus Allocation</h1>
+              <h1 className="font-bold text-gray-900">Campus Allocation</h1>
               <p className="text-gray-600 mt-1">Manage trainee campus assignments and deployment</p>
             </div>
             <div className="flex items-center gap-2">
@@ -314,7 +457,7 @@ const CampusAllocation = () => {
 
         {/* Campus Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {campuses.map((campus) => (
+          {campusesWithUsage.map((campus) => (
             <div key={campus._id || campus.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-medium text-gray-900">{campus.name}</h3>
@@ -324,16 +467,16 @@ const CampusAllocation = () => {
               <div className="space-y-1">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Capacity:</span>
-                  <span className="font-medium">{campus.capacity}</span>
+                  <span className="font-medium">{campus.capacity || 0}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Allocated:</span>
-                  <span className="font-medium">{campus.currentAllocations}</span>
+                  <span className="font-medium">{campus.allocatedCount}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className="bg-blue-600 h-2 rounded-full" 
-                    style={{ width: `${(campus.currentAllocations / campus.capacity) * 100}%` }}
+                    style={{ width: `${campus.utilisation}%` }}
                   ></div>
                 </div>
               </div>
@@ -374,7 +517,7 @@ const CampusAllocation = () => {
                 Add Campus
               </button>
               <button
-                onClick={() => setShowAllocationModal(true)}
+                onClick={() => openAllocationModal([])}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
               >
                 <LuUser className="w-4 h-4 mr-2" />
@@ -396,7 +539,6 @@ const CampusAllocation = () => {
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-lg font-medium text-gray-900">{trainee.name}</h3>
-                      <span className="text-sm text-gray-500">({trainee.employeeId})</span>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         trainee.allocatedCampus 
                           ? 'bg-green-100 text-green-800' 
@@ -430,8 +572,8 @@ const CampusAllocation = () => {
                     ) : (
                       <button
                         onClick={() => {
-                          setSelectedTrainee(trainee);
-                          setShowAllocationModal(true);
+                          const key = getTraineeKey(trainee);
+                          openAllocationModal(key ? [key] : []);
                         }}
                         className="px-3 py-1 text-blue-600 hover:text-blue-800 text-sm font-medium"
                       >
@@ -448,38 +590,95 @@ const CampusAllocation = () => {
         {/* Allocation Modal */}
         {showAllocationModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl">
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xl font-bold text-gray-900">Allocate Campus</h2>
                   <button
-                    onClick={() => setShowAllocationModal(false)}
+                    onClick={closeAllocationModal}
                     className="text-gray-400 hover:text-gray-600"
                   >
                     <LuX className="w-6 h-6" />
                   </button>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-5">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Trainee
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Selected Trainees
                     </label>
-                    <select
-                      value={selectedTrainee?._id || selectedTrainee?.id || ''}
-                      onChange={(e) => {
-                        const trainee = trainees.find(t => (t._id || t.id) === e.target.value);
-                        setSelectedTrainee(trainee);
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select Trainee</option>
-                      {trainees.map((trainee) => (
-                        <option key={trainee._id || trainee.id} value={trainee._id || trainee.id}>
-                          {trainee.name} ({trainee.employeeId}) - {trainee.allocatedCampus ? 'Allocated' : 'Not Allocated'}
-                        </option>
-                      ))}
-                    </select>
+                    {selectedTraineeDetails.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedTraineeDetails.map((trainee) => (
+                          <div
+                            key={trainee.__selectionId}
+                            className="group flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-sm text-blue-700"
+                          >
+                            <div className="leading-tight">
+                              <p className="font-medium">{trainee.name}</p>
+                              {trainee.email && (
+                                <p className="text-xs text-blue-600">{trainee.email}</p>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSelectedTrainee(trainee.__selectionId)}
+                              className="text-blue-500 transition hover:text-blue-700"
+                            >
+                              <LuX className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                        No trainees added yet. Use the search below to add one or more trainees.
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Search Trainees
+                    </label>
+                    <div className="relative">
+                      <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={traineeSearchTerm}
+                        onChange={(e) => setTraineeSearchTerm(e.target.value)}
+                        placeholder="Search by name, employee ID, or email"
+                        className="w-full rounded-md border border-gray-300 py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="mt-3 max-h-48 overflow-y-auto rounded-md border border-gray-200">
+                      {modalFilteredTrainees.length ? (
+                        <div className="divide-y divide-gray-100">
+                          {modalFilteredTrainees.map((trainee) => (
+                            <button
+                              key={trainee._id || trainee.id || trainee.author_id}
+                              type="button"
+                              onClick={() => handleAddTraineeSelection(trainee)}
+                              className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-gray-50"
+                            >
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{trainee.name}</p>
+                                {trainee.email && (
+                                  <p className="text-xs text-gray-500">{trainee.email}</p>
+                                )}
+                              </div>
+                              <span className="text-xs font-semibold text-blue-600">Add</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-4 text-sm text-gray-500">
+                          {traineeSearchTerm
+                            ? 'No trainees match your search.'
+                            : 'All available trainees have been added.'}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -515,7 +714,7 @@ const CampusAllocation = () => {
 
                 <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
                   <button
-                    onClick={() => setShowAllocationModal(false)}
+                    onClick={closeAllocationModal}
                     className="px-4 py-2 text-gray-600 hover:text-gray-800"
                   >
                     Cancel

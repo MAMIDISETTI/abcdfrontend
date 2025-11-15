@@ -1,6 +1,6 @@
-export const BASE_URL = 'https://abcdbackend-wytb.onrender.com';
+export const BASE_URL ="https://abcdbackend-wytb.onrender.com" 
 
-
+// 'https://abcdbackend-wytb.onrender.com';
 // utils/apiPaths.js
 export const API_PATHS = {
   AUTH: {

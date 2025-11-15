@@ -109,7 +109,7 @@ const DeactivatedUsers = () => {
       <div className="mb-8">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Deactivated Users</h1>
+            <h1 className="font-bold text-gray-900 mb-2">Deactivated Users</h1>
             <p className="text-gray-600">Manage deactivated users and their remarks</p>
           </div>
           <button

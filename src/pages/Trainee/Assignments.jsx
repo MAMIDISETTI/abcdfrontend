@@ -470,7 +470,7 @@ const TraineeAssignments = () => {
               <LuBookOpen className="w-8 h-8 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Assignments</h1>
+              <h1 className="font-bold text-gray-900">Assignments</h1>
               <p className="text-gray-600">Complete your assigned tasks and assessments</p>
             </div>
           </div>

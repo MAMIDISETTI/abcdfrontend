@@ -395,7 +395,7 @@ const DemoManagement = () => {
       <div className="p-3 md:p-6 bg-gray-50 min-h-screen">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Demo Management</h1>
+          <h1 className="font-bold text-gray-900 mb-2">Demo Management</h1>
           <p className="text-gray-600">Upload demos, request offline slots, and track your progress</p>
         </div>
 

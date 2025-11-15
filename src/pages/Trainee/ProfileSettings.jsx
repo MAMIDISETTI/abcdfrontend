@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import { 
   LuUser, 
@@ -11,7 +11,9 @@ import {
   LuPencil,
   LuLock,
   LuEye,
-  LuEyeOff
+  LuEyeOff,
+  LuMapPin,
+  LuBookOpen
 } from 'react-icons/lu';
 import { UserContext } from '../../context/userContext';
 import moment from 'moment';
@@ -24,19 +26,70 @@ const ProfileSettings = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [fetchingProfile, setFetchingProfile] = useState(true);
   
   const [profileData, setProfileData] = useState({
     name: user?.name || '',
     email: user?.email || '',
-    phone: user?.phone || '',
+    phone: user?.phone || user?.phone_number || '',
+    phone_number: user?.phone_number || user?.phone || '',
     department: user?.department || '',
     employeeId: user?.employeeId || '',
     genre: user?.genre || '',
-    joiningDate: user?.joiningDate || '',
+    joiningDate: user?.joiningDate || user?.date_of_joining || '',
     qualification: user?.qualification || '',
+    specialization: user?.specialization || '',
+    state: user?.state || '',
+    haveMTechPC: user?.haveMTechPC || '',
+    haveMTechOD: user?.haveMTechOD || '',
+    yearOfPassout: user?.yearOfPassout || '',
     role: user?.role || '',
     status: user?.status || ''
   });
+
+  // Fetch full profile data when component loads
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        setFetchingProfile(true);
+        const response = await axiosInstance.get(API_PATHS.AUTH.GET_PROFILE);
+        
+        if (response.data) {
+          const profile = response.data;
+          
+          // Check if employeeId is in joinerData
+          const employeeIdFromJoiner = profile.joinerData?.employeeId || profile.joinerData?.employee_id;
+          const finalEmployeeId = profile.employeeId || employeeIdFromJoiner || '';
+          
+          setProfileData({
+            name: profile.name || '',
+            email: profile.email || '',
+            phone: profile.phone || profile.phone_number || '',
+            phone_number: profile.phone_number || profile.phone || '',
+            department: profile.department || '',
+            employeeId: finalEmployeeId,
+            genre: profile.genre || '',
+            joiningDate: profile.joiningDate || profile.date_of_joining || '',
+            qualification: profile.qualification || '',
+            specialization: profile.specialization || '',
+            state: profile.state || '',
+            haveMTechPC: profile.haveMTechPC || '',
+            haveMTechOD: profile.haveMTechOD || '',
+            yearOfPassout: profile.yearOfPassout || '',
+            role: profile.role || '',
+            status: profile.status || ''
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+        toast.error('Failed to load profile data');
+      } finally {
+        setFetchingProfile(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
 
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
@@ -64,16 +117,18 @@ const ProfileSettings = () => {
     try {
       setLoading(true);
       
-      const response = await axiosInstance.put(API_PATHS.AUTH.UPDATE_PROFILE, profileData);
+      const response = await axiosInstance.put('/api/auth/profile', profileData);
       
       if (response.data.success) {
         updateUser(response.data.user);
         toast.success('Profile updated successfully!');
         setIsEditing(false);
+      } else {
+        toast.error(response.data.message || 'Failed to update profile');
       }
     } catch (error) {
       console.error('Error updating profile:', error);
-      toast.error('Failed to update profile');
+      toast.error(error.response?.data?.message || 'Failed to update profile');
     } finally {
       setLoading(false);
     }
@@ -114,19 +169,34 @@ const ProfileSettings = () => {
     }
   };
 
-  const handleCancel = () => {
-    setProfileData({
-      name: user?.name || '',
-      email: user?.email || '',
-      phone: user?.phone || '',
-      department: user?.department || '',
-      employeeId: user?.employeeId || '',
-      genre: user?.genre || '',
-      joiningDate: user?.joiningDate || '',
-      qualification: user?.qualification || '',
-      role: user?.role || '',
-      status: user?.status || ''
-    });
+  const handleCancel = async () => {
+    // Re-fetch profile data to reset to original values
+    try {
+      const response = await axiosInstance.get(API_PATHS.AUTH.GET_PROFILE);
+      if (response.data) {
+        const profile = response.data;
+        setProfileData({
+          name: profile.name || '',
+          email: profile.email || '',
+          phone: profile.phone || profile.phone_number || '',
+          phone_number: profile.phone_number || profile.phone || '',
+          department: profile.department || '',
+          employeeId: profile.employeeId || '',
+          genre: profile.genre || '',
+          joiningDate: profile.joiningDate || profile.date_of_joining || '',
+          qualification: profile.qualification || '',
+          specialization: profile.specialization || '',
+          state: profile.state || '',
+          haveMTechPC: profile.haveMTechPC || '',
+          haveMTechOD: profile.haveMTechOD || '',
+          yearOfPassout: profile.yearOfPassout || '',
+          role: profile.role || '',
+          status: profile.status || ''
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
     setIsEditing(false);
   };
 
@@ -136,7 +206,7 @@ const ProfileSettings = () => {
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Profile & Settings</h1>
+            <h1 className="font-bold text-gray-900">Profile & Settings</h1>
             <p className="text-gray-600 mt-2">Manage your personal information and account settings</p>
           </div>
 
@@ -174,22 +244,28 @@ const ProfileSettings = () => {
                   )}
                 </div>
 
-                <div className="space-y-6">
-                  {/* Profile Picture */}
-                  <div className="flex items-center space-x-4">
-                    <div className="w-20 h-20 bg-blue-500 rounded-full flex items-center justify-center">
-                      <span className="text-white font-semibold text-2xl">
-                        {user?.name?.split(' ').map(n => n[0]).join('') || 'U'}
-                      </span>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900">{user?.name || 'User'}</h3>
-                      <p className="text-gray-600">{user?.role?.charAt(0).toUpperCase() + user?.role?.slice(1) || 'Trainee'}</p>
-                    </div>
+                {fetchingProfile ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-gray-500">Loading profile data...</div>
                   </div>
+                ) : (
+                  <>
+                    <div className="space-y-6">
+                      {/* Profile Picture */}
+                      <div className="flex items-center space-x-4">
+                        <div className="w-20 h-20 bg-blue-500 rounded-full flex items-center justify-center">
+                          <span className="text-white font-semibold text-2xl">
+                            {profileData.name?.split(' ').map(n => n[0]).join('') || 'U'}
+                          </span>
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-medium text-gray-900">{profileData.name || 'User'}</h3>
+                          <p className="text-gray-600">{profileData.role?.charAt(0).toUpperCase() + profileData.role?.slice(1) || 'Trainee'}</p>
+                        </div>
+                      </div>
 
-                  {/* Form Fields */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Form Fields */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Full Name
@@ -200,6 +276,7 @@ const ProfileSettings = () => {
                         value={profileData.name}
                         onChange={handleInputChange}
                         disabled={!isEditing}
+                        placeholder={isEditing ? "Enter full name" : ""}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
@@ -214,6 +291,7 @@ const ProfileSettings = () => {
                         value={profileData.email}
                         onChange={handleInputChange}
                         disabled={!isEditing}
+                        placeholder={isEditing ? "Enter email address" : ""}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
@@ -228,6 +306,7 @@ const ProfileSettings = () => {
                         value={profileData.phone}
                         onChange={handleInputChange}
                         disabled={!isEditing}
+                        placeholder={isEditing ? "Enter phone number" : ""}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
@@ -242,6 +321,7 @@ const ProfileSettings = () => {
                         value={profileData.department}
                         onChange={handleInputChange}
                         disabled={!isEditing}
+                        placeholder={isEditing ? "Enter department" : ""}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
@@ -256,6 +336,7 @@ const ProfileSettings = () => {
                         value={profileData.employeeId}
                         onChange={handleInputChange}
                         disabled={!isEditing}
+                        placeholder={isEditing ? "Enter employee ID" : ""}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
@@ -270,6 +351,82 @@ const ProfileSettings = () => {
                         value={profileData.qualification}
                         onChange={handleInputChange}
                         disabled={!isEditing}
+                        placeholder={isEditing ? "Enter qualification" : ""}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Specialization
+                      </label>
+                      <input
+                        type="text"
+                        name="specialization"
+                        value={profileData.specialization}
+                        onChange={handleInputChange}
+                        disabled={!isEditing}
+                        placeholder={isEditing ? "Enter specialization" : ""}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        State
+                      </label>
+                      <input
+                        type="text"
+                        name="state"
+                        value={profileData.state}
+                        onChange={handleInputChange}
+                        disabled={!isEditing}
+                        placeholder={isEditing ? "Enter state" : ""}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Year of Passout
+                      </label>
+                      <input
+                        type="text"
+                        name="yearOfPassout"
+                        value={profileData.yearOfPassout}
+                        onChange={handleInputChange}
+                        disabled={!isEditing}
+                        placeholder={isEditing ? "Enter year of passout" : ""}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Have M.Tech (PC)
+                      </label>
+                      <input
+                        type="text"
+                        name="haveMTechPC"
+                        value={profileData.haveMTechPC}
+                        onChange={handleInputChange}
+                        disabled={!isEditing}
+                        placeholder={isEditing ? "Yes/No" : ""}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Have M.Tech (OD)
+                      </label>
+                      <input
+                        type="text"
+                        name="haveMTechOD"
+                        value={profileData.haveMTechOD}
+                        onChange={handleInputChange}
+                        disabled={!isEditing}
+                        placeholder={isEditing ? "Yes/No" : ""}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
@@ -304,6 +461,8 @@ const ProfileSettings = () => {
                     </div>
                   </div>
                 </div>
+                </>
+                )}
               </div>
             </div>
 

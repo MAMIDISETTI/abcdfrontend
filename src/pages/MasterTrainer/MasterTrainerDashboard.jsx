@@ -52,7 +52,7 @@ const MasterTrainerDashboard = () => {
   // Fetch day plans statistics
   const getDayPlansStats = async () => {
     try {
-      const res = await axiosInstance.get(API_PATHS.DAY_PLANS.GET_ALL, {
+      const res = await axiosInstance.get(API_PATHS.TRAINEE_DAY_PLANS.GET_ALL, {
         params: { 
           role: 'master_trainer',
           stats: true 
@@ -62,25 +62,40 @@ const MasterTrainerDashboard = () => {
       const data = res.data;
       if (data.totalPlans !== undefined) {
         // Update dashboard data with real day plans stats
+        // 'published' in API response means 'approved' plans
         setDashboardData(prev => ({
           ...prev,
           dayPlans: {
             totalPlans: data.totalPlans || 0,
-            publishedPlans: data.published || 0,
-            completedPlans: data.completed || 0,
-            draftPlans: data.draft || 0
+            publishedPlans: data.published || 0, // Plans approved by trainers
+            completedPlans: data.completed || 0, // Plans with EOD approved
+            draftPlans: data.draft || 0 // Draft/in_progress plans
           }
         }));
       } else {
-        setDashboardData(prev => ({
-          ...prev,
-          dayPlans: {
-            totalPlans: 0,
-            publishedPlans: 0,
-            completedPlans: 0,
-            draftPlans: 0
-          }
-        }));
+        // If stats not available, try to calculate from day plans array
+        if (res.data.dayPlans && Array.isArray(res.data.dayPlans)) {
+          const plans = res.data.dayPlans;
+          setDashboardData(prev => ({
+            ...prev,
+            dayPlans: {
+              totalPlans: plans.length || 0,
+              publishedPlans: plans.filter(p => p.status === 'approved').length || 0,
+              completedPlans: plans.filter(p => p.status === 'completed' && p.eodUpdate?.status === 'approved').length || 0,
+              draftPlans: plans.filter(p => p.status === 'draft' || p.status === 'in_progress').length || 0
+            }
+          }));
+        } else {
+          setDashboardData(prev => ({
+            ...prev,
+            dayPlans: {
+              totalPlans: 0,
+              publishedPlans: 0,
+              completedPlans: 0,
+              draftPlans: 0
+            }
+          }));
+        }
       }
     } catch (err) {
       console.error("Error fetching day plans stats:", err);

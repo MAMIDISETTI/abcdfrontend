@@ -111,9 +111,9 @@ const AssignTrainees = () => {
       setAssignedTrainees(assignedTraineesData);
       
       // Debug logging
-      console.log('All trainees:', allTrainees.length);
-      console.log('Assigned trainees:', assignedTraineesData.length);
-      console.log('Unassigned trainees:', unassignedTrainees.length);
+      // console.log('All trainees:', allTrainees.length);
+      // console.log('Assigned trainees:', assignedTraineesData.length);
+      // console.log('Unassigned trainees:', unassignedTrainees.length);
     } catch (error) {
       console.error('Error fetching assigned trainees:', error);
       toast.error('Failed to fetch assigned trainees data');

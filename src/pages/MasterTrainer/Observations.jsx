@@ -24,6 +24,8 @@ const MasterTrainerObservations = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [selectedObservation, setSelectedObservation] = useState(null);
+  const [showObservationModal, setShowObservationModal] = useState(false);
 
   useEffect(() => {
     fetchObservations();
@@ -43,9 +45,15 @@ const MasterTrainerObservations = () => {
     }
   };
 
-  const handleReviewObservation = (observation) => {
-    // TODO: Implement review functionality
-    };
+  const openObservationModal = (observation) => {
+    setSelectedObservation(observation);
+    setShowObservationModal(true);
+  };
+
+  const closeObservationModal = () => {
+    setShowObservationModal(false);
+    setSelectedObservation(null);
+  };
 
   const filteredObservations = observations.filter(observation => {
     const traineeName = observation.trainee?.name || 'Unknown Trainee';
@@ -64,7 +72,7 @@ const MasterTrainerObservations = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Cultural & Behavioral Observations</h1>
+              <h1 className=" font-bold text-gray-900">Cultural & Behavioral Observations</h1>
               <p className="text-gray-600 mt-1">Review and manage trainee observations submitted by trainers</p>
             </div>
           </div>
@@ -163,21 +171,27 @@ const MasterTrainerObservations = () => {
                                 'bg-green-100 text-green-800';
               
               return (
-                <div key={observation._id} className="p-6 hover:bg-gray-50">
+                <button
+                  key={observation._id}
+                  onClick={() => openObservationModal(observation)}
+                  className="w-full text-left p-6 hover:bg-gray-50 transition-colors"
+                >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex flex-wrap items-center gap-3 mb-2">
                         <h3 className="text-lg font-medium text-gray-900">
                           Observation Report - {traineeName}
                         </h3>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor}`}>
-                          {observation.status?.charAt(0).toUpperCase() + observation.status?.slice(1)}
-                        </span>
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {observation.overallRating?.charAt(0).toUpperCase() + observation.overallRating?.slice(1)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor}`}>
+                            {observation.status?.charAt(0).toUpperCase() + observation.status?.slice(1)}
+                          </span>
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {observation.overallRating?.charAt(0).toUpperCase() + observation.overallRating?.slice(1)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-gray-500 mb-2">
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 mt-1">
                         <span className="flex items-center gap-1">
                           <LuUser className="w-4 h-4" />
                           Trainee: {traineeName}
@@ -191,114 +205,159 @@ const MasterTrainerObservations = () => {
                           {new Date(observation.date).toLocaleDateString()}
                         </span>
                       </div>
-                      
-                      {/* Culture & Behavior Ratings */}
-                      <div className="grid grid-cols-2 gap-4 mb-3">
-                        <div className="bg-gray-50 p-3 rounded-lg">
-                          <h4 className="font-medium text-sm text-gray-700 mb-2">Culture & Behavior</h4>
-                          <div className="space-y-1 text-sm">
-                            <div className="flex justify-between">
-                              <span>Communication:</span>
-                              <span className="font-medium">{observation.culture?.communication}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Teamwork:</span>
-                              <span className="font-medium">{observation.culture?.teamwork}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Discipline:</span>
-                              <span className="font-medium">{observation.culture?.discipline}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Attitude:</span>
-                              <span className="font-medium">{observation.culture?.attitude}</span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="bg-gray-50 p-3 rounded-lg">
-                          <h4 className="font-medium text-sm text-gray-700 mb-2">Grooming</h4>
-                          <div className="space-y-1 text-sm">
-                            <div className="flex justify-between">
-                              <span>Dress Code:</span>
-                              <span className="font-medium">{observation.grooming?.dressCode}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Neatness:</span>
-                              <span className="font-medium">{observation.grooming?.neatness}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Punctuality:</span>
-                              <span className="font-medium">{observation.grooming?.punctuality}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Strengths and Areas for Improvement */}
-                      {(observation.strengths?.length > 0 || observation.areasForImprovement?.length > 0) && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                          {observation.strengths?.length > 0 && (
-                            <div className="bg-green-50 p-3 rounded-lg">
-                              <h4 className="font-medium text-sm text-green-800 mb-2">Strengths</h4>
-                              <ul className="text-sm text-green-700">
-                                {observation.strengths.map((strength, index) => (
-                                  <li key={index} className="flex items-center gap-1">
-                                    <span className="w-1 h-1 bg-green-600 rounded-full"></span>
-                                    {strength}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          
-                          {observation.areasForImprovement?.length > 0 && (
-                            <div className="bg-orange-50 p-3 rounded-lg">
-                              <h4 className="font-medium text-sm text-orange-800 mb-2">Areas for Improvement</h4>
-                              <ul className="text-sm text-orange-700">
-                                {observation.areasForImprovement.map((area, index) => (
-                                  <li key={index} className="flex items-center gap-1">
-                                    <span className="w-1 h-1 bg-orange-600 rounded-full"></span>
-                                    {area}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* Recommendations */}
-                      {observation.recommendations && (
-                        <div className="bg-blue-50 p-3 rounded-lg mb-3">
-                          <h4 className="font-medium text-sm text-blue-800 mb-1">Recommendations</h4>
-                          <p className="text-sm text-blue-700">{observation.recommendations}</p>
-                        </div>
-                      )}
-                      
-                      {/* Master Trainer Notes */}
-                      {observation.masterTrainerNotes && (
-                        <div className="bg-purple-50 p-3 rounded-lg">
-                          <h4 className="font-medium text-sm text-purple-800 mb-1">Master Trainer Notes</h4>
-                          <p className="text-sm text-purple-700">{observation.masterTrainerNotes}</p>
-                        </div>
-                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleReviewObservation(observation)}
-                        className="p-2 text-blue-600 hover:text-blue-800 cursor-pointer"
-                        title="Review Observation"
-                      >
-                        <LuEye className="w-4 h-4" />
-                      </button>
-                    </div>
+                    <LuEye className="w-5 h-5 text-blue-500 mt-1" />
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
         </div>
+
+        {/* Observation Detail Modal */}
+        {showObservationModal && selectedObservation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Observation Report - {selectedObservation.trainee?.name || 'Unknown Trainee'}
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      selectedObservation.status === 'draft'
+                        ? 'bg-gray-100 text-gray-800'
+                        : selectedObservation.status === 'submitted'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}>
+                      {selectedObservation.status?.charAt(0).toUpperCase() + selectedObservation.status?.slice(1)}
+                    </span>
+                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {selectedObservation.overallRating?.charAt(0).toUpperCase() + selectedObservation.overallRating?.slice(1)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={closeObservationModal}
+                  className="text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <LuX className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="px-6 py-5 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <LuUser className="w-4 h-4 text-gray-400" />
+                    <span className="font-medium text-gray-500">Trainee:</span>
+                    <span className="text-gray-900">{selectedObservation.trainee?.name || 'Unknown Trainee'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <LuUser className="w-4 h-4 text-gray-400" />
+                    <span className="font-medium text-gray-500">Trainer:</span>
+                    <span className="text-gray-900">{selectedObservation.trainer?.name || 'Unknown Trainer'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <LuCalendar className="w-4 h-4 text-gray-400" />
+                    <span className="font-medium text-gray-500">Observed on:</span>
+                    <span className="text-gray-900">
+                      {selectedObservation.date ? new Date(selectedObservation.date).toLocaleDateString() : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3">Culture & Behavior</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Communication</span>
+                        <span className="font-medium text-gray-900">{selectedObservation.culture?.communication || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Teamwork</span>
+                        <span className="font-medium text-gray-900">{selectedObservation.culture?.teamwork || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Discipline</span>
+                        <span className="font-medium text-gray-900">{selectedObservation.culture?.discipline || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Attitude</span>
+                        <span className="font-medium text-gray-900">{selectedObservation.culture?.attitude || '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3">Grooming</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Dress Code</span>
+                        <span className="font-medium text-gray-900">{selectedObservation.grooming?.dressCode || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Neatness</span>
+                        <span className="font-medium text-gray-900">{selectedObservation.grooming?.neatness || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Punctuality</span>
+                        <span className="font-medium text-gray-900">{selectedObservation.grooming?.punctuality || '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {(selectedObservation.strengths?.length > 0 || selectedObservation.areasForImprovement?.length > 0) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {selectedObservation.strengths?.length > 0 && (
+                      <div className="bg-green-50 rounded-xl p-4">
+                        <h3 className="font-semibold text-green-800 mb-2">Strengths</h3>
+                        <ul className="space-y-2 text-sm text-green-700">
+                          {selectedObservation.strengths.map((strength, index) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-green-600"></span>
+                              <span>{strength}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {selectedObservation.areasForImprovement?.length > 0 && (
+                      <div className="bg-orange-50 rounded-xl p-4">
+                        <h3 className="font-semibold text-orange-800 mb-2">Areas for Improvement</h3>
+                        <ul className="space-y-2 text-sm text-orange-700">
+                          {selectedObservation.areasForImprovement.map((area, index) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-orange-600"></span>
+                              <span>{area}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedObservation.recommendations && (
+                  <div className="bg-blue-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-blue-800 mb-2">Recommendations</h3>
+                    <p className="text-sm text-blue-700">{selectedObservation.recommendations}</p>
+                  </div>
+                )}
+
+                {selectedObservation.masterTrainerNotes && (
+                  <div className="bg-purple-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-purple-800 mb-2">Master Trainer Notes</h3>
+                    <p className="text-sm text-purple-700">{selectedObservation.masterTrainerNotes}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </DashboardLayout>

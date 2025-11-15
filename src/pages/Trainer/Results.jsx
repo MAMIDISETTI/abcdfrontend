@@ -102,7 +102,7 @@ const TrainerResults = () => {
       setLoading(true);
       // Fetch results for all trainees assigned to this trainer
       const response = await axiosInstance.get(API_PATHS.TRAINER.TRAINEE_RESULTS);
-      console.log('Results response:', response.data);
+     // console.log('Results response:', response.data);
       setResults(response.data.results || []);
     } catch (error) {
       console.error('Error fetching results:', error);

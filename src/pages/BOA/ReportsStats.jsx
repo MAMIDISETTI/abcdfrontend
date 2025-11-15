@@ -586,18 +586,30 @@ const ReportsStats = () => {
 
     const csvContent = [
       headers.join(','),
-      ...data.map(trainee => [
-        trainee.author_id || '',
-        `"${trainee.name || ''}"`,
-        trainee.email || '',
-        trainee.phone || '',
-        `"${trainee.department || ''}"`,
-        `"${trainee.designation || ''}"`,
-        trainee.assignedTrainer || 'Not Assigned',
-        trainee.status || 'active',
-        trainee.created_at || '',
-        trainee.last_login || 'Never'
-      ].join(','))
+      ...data.map(trainee => {
+        // Handle assignedTrainer - could be object, string, or null
+        let assignedTrainer = 'Not Assigned';
+        if (trainee.assignedTrainer) {
+          if (typeof trainee.assignedTrainer === 'object') {
+            assignedTrainer = trainee.assignedTrainer.name || trainee.assignedTrainer._id || 'Assigned';
+          } else {
+            assignedTrainer = trainee.assignedTrainer;
+          }
+        }
+
+        return [
+          trainee.author_id || '',
+          `"${trainee.name || ''}"`,
+          trainee.email || '',
+          trainee.phone || '',
+          `"${trainee.department || ''}"`,
+          `"${trainee.designation || ''}"`,
+          `"${assignedTrainer}"`,
+          trainee.status || 'active',
+          trainee.created_at || '',
+          trainee.last_login || 'Never'
+        ].join(',');
+      })
     ].join('\n');
 
     return csvContent;
@@ -621,19 +633,31 @@ const ReportsStats = () => {
 
     const csvContent = [
       headers.join(','),
-      ...data.map(joiner => [
-        joiner.author_id || '',
-        `"${joiner.name || ''}"`,
-        joiner.email || '',
-        joiner.phone || '',
-        `"${joiner.department || ''}"`,
-        `"${joiner.designation || ''}"`,
-        joiner.joiningDate || joiner.createdAt || '',
-        joiner.status || 'active',
-        joiner.assignedTrainer || 'Not Assigned',
-        joiner.createdAt || '',
-        joiner.last_login || 'Never'
-      ].join(','))
+      ...data.map(joiner => {
+        // Handle assignedTrainer - could be object, string, or null
+        let assignedTrainer = 'Not Assigned';
+        if (joiner.assignedTrainer) {
+          if (typeof joiner.assignedTrainer === 'object') {
+            assignedTrainer = joiner.assignedTrainer.name || joiner.assignedTrainer._id || 'Assigned';
+          } else {
+            assignedTrainer = joiner.assignedTrainer;
+          }
+        }
+
+        return [
+          joiner.author_id || '',
+          `"${joiner.name || ''}"`,
+          joiner.email || '',
+          joiner.phone || '',
+          `"${joiner.department || ''}"`,
+          `"${joiner.designation || ''}"`,
+          joiner.joiningDate || joiner.createdAt || '',
+          joiner.status || 'active',
+          `"${assignedTrainer}"`,
+          joiner.createdAt || '',
+          joiner.last_login || 'Never'
+        ].join(',');
+      })
     ].join('\n');
 
     return csvContent;

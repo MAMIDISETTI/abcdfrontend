@@ -341,7 +341,7 @@ const PendingAssignmentsPopup = ({ isOpen, onClose, onSuccess }) => {
                   }}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                 >
-                  Proceed to Assignment
+                  Proceed to allocate Mentors
                 </button>
                 <button
                   onClick={() => setCurrentStep('select')}

@@ -33,6 +33,7 @@ const LearningReports = () => {
         if (response.data.results) {
           const results = response.data.results;
           
+          // Debug logging
           // Process exam scores for different exam types
           const examScores = results.map(result => ({
             course: result.exam_type || result.examType || 'Unknown',
@@ -43,6 +44,8 @@ const LearningReports = () => {
             trainer: result.trainer_name || result.trainerName || 'N/A'
           }));
           
+          // Debug logging for filtered results
+          const fortnightExams = examScores.filter(exam => exam.course.toLowerCase().includes('fortnight'));
           setLearningReports(prev => ({
             ...prev,
             examScores: examScores,
@@ -97,7 +100,7 @@ const LearningReports = () => {
       <div className="p-3 md:p-6 bg-gray-50 min-h-screen">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Learning Reports</h1>
+          <h1 className=" font-bold text-gray-900 mb-2">Learning Reports</h1>
           <p className="text-gray-600">Track your progress and view your exam results.</p>
         </div>
 

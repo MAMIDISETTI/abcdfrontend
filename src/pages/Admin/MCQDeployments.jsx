@@ -323,7 +323,7 @@ const MCQDeployments = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+          <h1 className="font-bold text-gray-900 flex items-center">
             <LuBrain className="w-8 h-8 mr-3 text-blue-600" />
             MCQ Deployments
           </h1>

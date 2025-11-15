@@ -94,7 +94,7 @@ const SideMenu = ({ activeMenu, onMenuClick }) => {
       }
     }
   }, [activeMenu, user?.role]);
-  return <div className="w-64 h-[calc(100vh-50px)] bg-white border-r border-gray-200/50 lg:sticky lg:top-[61px] z-20">
+  return <div className="w-64 h-[calc(100vh-50px)] bg-white border-r border-gray-200/50 lg:sticky lg:top-[61px] z-20 overflow-y-auto">
       <div className="flex flex-col items-center justify-center mb-7 pt-5">
         <div className="relative">
           {user?.profileImageUrl ? (
