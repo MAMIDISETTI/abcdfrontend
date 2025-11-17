@@ -5,7 +5,6 @@ import {
   LuShield, 
   LuSettings,
   LuTrendingUp,
-  LuEye,
   LuLogOut,
   LuBrain,
   LuActivity,
@@ -39,12 +38,6 @@ const AdminSidebar = ({ activeTab, setActiveTab, onLogout }) => {
       path: '/admin/role-distribution'
     },
     {
-      id: 'account-status',
-      label: 'Account Status',
-      icon: LuEye,
-      path: '/admin/account-status'
-    },
-    {
       id: 'mcq-deployments',
       label: 'MCQ Deployments',
       icon: LuBrain,
@@ -55,6 +48,12 @@ const AdminSidebar = ({ activeTab, setActiveTab, onLogout }) => {
       label: 'Candidate Dashboard',
       icon: LuActivity,
       path: '/admin/candidate-dashboard'
+    },
+    {
+      id: 'candidate-performance-dashboard',
+      label: 'Candidate Performance Dashboard',
+      icon: LuTrendingUp,
+      path: '/admin/candidate-performance-dashboard'
     },
     {
       id: 'settings',

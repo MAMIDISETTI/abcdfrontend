@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import { LuUserPlus, LuMail, LuPhone, LuBuilding, LuCalendar, LuCheck, LuX, LuRefreshCw, LuUsers } from 'react-icons/lu';
 import { toast } from 'react-hot-toast';
@@ -7,6 +8,8 @@ import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 
 const NewJoiners = () => {
+  const location = useLocation();
+  
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -25,6 +28,11 @@ const NewJoiners = () => {
     username: '',
     password: ''
   });
+  
+  // Determine active menu based on route
+  const activeMenu = location.pathname === '/boa/upload-candidate-details' 
+    ? 'Upload Candidate Details' 
+    : 'New Joiners';
 
   // Fetch recent joiners from database
   const fetchRecentJoiners = async () => {
@@ -250,7 +258,7 @@ const NewJoiners = () => {
   };
 
   return (
-    <DashboardLayout activeMenu="New Joiners">
+    <DashboardLayout activeMenu={activeMenu}>
       <div className="mt-5 mb-10">
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Record New Joiners</h2>
 

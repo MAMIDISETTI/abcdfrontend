@@ -295,6 +295,12 @@ import {
       path: "/boa/assign-trainees",
     },
     {
+      id: "boa07",
+      label: "Upload Candidate Details",
+      icon: LuUserPlus,
+      path: "/boa/upload-candidate-details",
+    },
+    {
       id: "boa03",
       label: "Upload Results",
       icon: LuFileSpreadsheet,

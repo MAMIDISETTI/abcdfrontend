@@ -117,6 +117,11 @@ export const API_PATHS = {
     STATS: "/api/joiners/stats",
     VALIDATE_SHEETS: "/api/joiners/validate-sheets",
     BULK_UPLOAD: "/api/joiners/bulk-upload",
+    GET_CANDIDATE_DETAILS: (authorId) => `/api/joiners/candidate-details/${authorId}`,
+    UPLOAD_CANDIDATE_REPORTS: (authorId) => `/api/joiners/candidate-details/${authorId}/upload-reports`,
+    VALIDATE_CANDIDATE_REPORTS_SHEETS: "/api/joiners/candidate-reports/validate-sheets",
+    VALIDATE_AUTHOR_ID: "/api/candidate-reports/validate-author",
+    BULK_UPLOAD_CANDIDATE_REPORTS: "/api/candidate-reports/bulk-upload",
   },
 
   RESULTS: {

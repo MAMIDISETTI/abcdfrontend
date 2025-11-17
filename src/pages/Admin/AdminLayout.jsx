@@ -8,9 +8,9 @@ import AdminDashboard from './AdminDashboard';
 import AccountActivation from './AccountActivation';
 import DeactivatedUsers from './DeactivatedUsers';
 import RoleDistribution from './RoleDistribution';
-import AccountStatus from './AccountStatus';
 import MCQDeployments from './MCQDeployments';
 import CandidateDashboard from './CandidateDashboardSimple';
+import CandidatePerformanceDashboard from './CandidatePerformanceDashboard';
 
 const AdminLayout = () => {
   const location = useLocation();
@@ -23,9 +23,9 @@ const AdminLayout = () => {
     '/admin/account-activation': 'account-activation',
     '/admin/deactivated-users': 'deactivated-users',
     '/admin/role-distribution': 'role-distribution',
-    '/admin/account-status': 'account-status',
     '/admin/mcq-deployments': 'mcq-deployments',
     '/admin/candidate-dashboard': 'candidate-dashboard',
+    '/admin/candidate-performance-dashboard': 'candidate-performance-dashboard',
     '/admin/settings': 'settings'
   };
   
@@ -63,12 +63,12 @@ const AdminLayout = () => {
         return <DeactivatedUsers />;
       case 'role-distribution':
         return <RoleDistribution />;
-      case 'account-status':
-        return <AccountStatus />;
       case 'mcq-deployments':
         return <MCQDeployments />;
       case 'candidate-dashboard':
         return <CandidateDashboard />;
+      case 'candidate-performance-dashboard':
+        return <CandidatePerformanceDashboard />;
       case 'settings':
         return (
           <div className="p-6">
@@ -100,9 +100,9 @@ const AdminLayout = () => {
             'account-activation': '/admin/account-activation',
             'deactivated-users': '/admin/deactivated-users',
             'role-distribution': '/admin/role-distribution',
-            'account-status': '/admin/account-status',
             'mcq-deployments': '/admin/mcq-deployments',
             'candidate-dashboard': '/admin/candidate-dashboard',
+            'candidate-performance-dashboard': '/admin/candidate-performance-dashboard',
             'settings': '/admin/settings'
           };
           const path = tabToPathMap[tabId] || '/admin/dashboard';

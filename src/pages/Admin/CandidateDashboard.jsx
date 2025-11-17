@@ -163,10 +163,6 @@ const CandidateDashboard = () => {
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="font-bold text-gray mb-2">Candidate Dashboard</h1>
-          <p className="text-gray-600">Data Access, Monitoring & Insights</p>
-        </div>
 
         {/* Search Section */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">

@@ -25,6 +25,7 @@ import UploadResults from "./pages/BOA/UploadResults";
 import ReportsStats from "./pages/BOA/ReportsStats";
 import BOASettings from "./pages/BOA/Settings";
 import BOAResults from "./pages/BOA/Results";
+import UploadCandidateDetails from "./pages/BOA/UploadCandidateDetails";
 
 import Login from "./pages/Auth/Login";
 import SignUp from "./pages/Auth/SignUp";
@@ -96,6 +97,7 @@ const App = () => {
               <Route path="/boa/dashboard" element={<BOADashboard />} />
               <Route path="/boa/new-joiners" element={<NewJoiners />} />
               <Route path="/boa/assign-trainees" element={<AssignTrainees />} />
+              <Route path="/boa/upload-candidate-details" element={<UploadCandidateDetails />} />
               <Route path="/boa/upload-results" element={<UploadResults />} />
               <Route path="/boa/results" element={<BOAResults />} />
               <Route path="/boa/reports-stats" element={<ReportsStats />} />
@@ -173,7 +175,14 @@ const App = () => {
 export default App;
 
 const Root = () => {
-  const { user, loading } = useContext(UserContext);
+  const context = useContext(UserContext);
+
+  // Handle case where context might be undefined
+  if (!context) {
+    return <div>Loading...</div>;
+  }
+
+  const { user, loading } = context;
 
   if(loading) return <Outlet />
   
