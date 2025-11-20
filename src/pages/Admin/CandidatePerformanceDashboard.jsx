@@ -465,27 +465,132 @@ const CandidatePerformanceDashboard = () => {
     const reportData = performanceData.learningReport.reportData;
     const skills = reportData.skills || [];
     
+    // Helper function to find value by multiple possible field names (case-insensitive)
+    // Must be defined before it's used
+    const findValueByVariations = (obj, variations) => {
+      if (!obj || typeof obj !== 'object') return null;
+      
+      // First try exact matches
+      for (const variation of variations) {
+        if (obj[variation] !== undefined && obj[variation] !== null && obj[variation] !== '') {
+          return obj[variation];
+        }
+      }
+      
+      // Then try case-insensitive matches
+      const lowerVariations = variations.map(v => v.toLowerCase().trim());
+      for (const k in obj) {
+        const lowerKey = k.toLowerCase().trim();
+        if (lowerVariations.includes(lowerKey) && obj[k] !== null && obj[k] !== undefined && obj[k] !== '') {
+          return obj[k];
+        }
+      }
+      
+      // Try partial matches (contains)
+      for (const variation of variations) {
+        const lowerVariation = variation.toLowerCase().trim();
+        for (const k in obj) {
+          const lowerKey = k.toLowerCase().trim();
+          if (lowerKey.includes(lowerVariation) || lowerVariation.includes(lowerKey)) {
+            if (obj[k] !== null && obj[k] !== undefined && obj[k] !== '') {
+              return obj[k];
+            }
+          }
+        }
+      }
+      
+      return null;
+    };
+    
     // Extract data for each skill/topic - handle multiple field name variations
-    const dailyQuizCounts = reportData['Daily Quiz counts'] || reportData['Daily Quiz Counts'] || reportData['Daily Quiz count'] || reportData.dailyQuizCounts || reportData.dailyQuizCount || {};
-    const dailyQuizAttempts = reportData['Daily Quiz attempts count'] || reportData['Daily Quiz Attempts'] || reportData['Daily Quiz attempts'] || reportData.dailyQuizAttempts || reportData.dailyQuizAttempt || {};
-    const dailyQuizAvgScores = reportData['Daily Quiz score Average in %'] || reportData['Daily Quiz avg scores'] || reportData['Daily Quiz Avg Scores'] || reportData['Daily Quiz Average'] || reportData.dailyQuizAvgScores || reportData.dailyQuizAvgScore || reportData.dailyQuizAverage || {};
+    // Extract data using flexible field name matching
+    // Daily Quiz
+    const dailyQuizCounts = findValueByVariations(reportData, [
+      'Daily Quiz counts', 'Daily Quiz Counts', 'Daily Quiz count', 
+      'dailyQuizCounts', 'dailyQuizCount', 'daily quiz counts'
+    ]) || {};
     
-    const fortNightExamCounts = reportData['Fort night exam counts'] || reportData['Fort Night Exam counts'] || reportData['Fort Night Exam Counts'] || reportData['Fort Night Exam count'] || reportData.fortNightExamCounts || reportData.fortNightExamCount || {};
-    const fortNightExamAttempts = reportData['Fort night exam attempts counts'] || reportData['Fort Night Exam attempts'] || reportData['Fort Night Exam Attempts'] || reportData['Fort Night Exam attempts count'] || reportData.fortNightExamAttempts || reportData.fortNightExamAttempt || {};
-    const fortNightExamAvgScores = reportData['Fort night exam score Average'] || reportData['Fort Night Exam score Average in %'] || reportData['Fort Night Exam avg scores'] || reportData['Fort Night Exam Avg Scores'] || reportData['Fort Night Exam Average'] || reportData.fortNightExamAvgScores || reportData.fortNightExamAvgScore || reportData.fortNightExamAverage || {};
+    const dailyQuizAttempts = findValueByVariations(reportData, [
+      'Daily Quiz attempts count', 'Daily Quiz Attempts', 'Daily Quiz attempts',
+      'Daily Quiz Attempts Count', 'dailyQuizAttempts', 'dailyQuizAttempt',
+      'daily quiz attempts count', 'daily quiz attempts'
+    ]) || {};
     
-    const courseExamAttempts = reportData['Course Exam attempts'] || reportData['Course Exam Attempts'] || reportData.courseExamAttempts || reportData.courseExamAttempt || {};
-    const courseExamScores = reportData['Course Exam score in %'] || reportData['Course Exam scores'] || reportData['Course Exam Scores'] || reportData['Course Exam score'] || reportData.courseExamScores || reportData.courseExamScore || {};
+    const dailyQuizAvgScores = findValueByVariations(reportData, [
+      'Daily Quiz score Average', 'Daily Quiz score Average in %', 
+      'Daily Quiz avg scores', 'Daily Quiz Avg Scores', 'Daily Quiz Average',
+      'dailyQuizAvgScores', 'dailyQuizAvgScore', 'dailyQuizAverage',
+      'daily quiz score average', 'daily quiz average'
+    ]) || {};
     
-    // Extract weeks data - handle multiple field name variations
-    const weeksExpected = reportData['No.of weeks expected complete the course'] || reportData['No of weeks expected complete the course'] || reportData['No.of weeks expected'] || reportData.weeksExpected || reportData.weeks_expected || {};
-    const weeksTaken = reportData['No.of weeks taken complete the course'] || reportData['No of weeks taken complete the course'] || reportData['No.of weeks taken'] || reportData.weeksTaken || reportData.weeks_taken || {};
+    // Fort Night Exam
+    const fortNightExamCounts = findValueByVariations(reportData, [
+      'Fort night exam counts', 'Fort Night Exam counts', 'Fort Night Exam Counts',
+      'Fort Night Exam count', 'fortNightExamCounts', 'fortNightExamCount',
+      'fort night exam counts'
+    ]) || {};
     
-    // Extract demo data - handle multiple field name variations
-    const onlineDemoCounts = reportData['Online demo counts'] || reportData['Online Demo counts'] || reportData['Online Demo Counts'] || reportData.onlineDemoCounts || reportData.onlineDemoCount || {};
-    const onlineDemoRatings = reportData['Online demo ratings Average'] || reportData['Online Demo ratings Average'] || reportData['Online Demo Ratings Average'] || reportData.onlineDemoRatings || reportData.onlineDemoRating || {};
-    const offlineDemoCounts = reportData['Offline demo counts'] || reportData['Offline Demo counts'] || reportData['Offline Demo Counts'] || reportData.offlineDemoCounts || reportData.offlineDemoCount || {};
-    const offlineDemoRatings = reportData['Offline demo ratings Average'] || reportData['Offline Demo ratings Average'] || reportData['Offline Demo Ratings Average'] || reportData.offlineDemoRatings || reportData.offlineDemoRating || {};
+    const fortNightExamAttempts = findValueByVariations(reportData, [
+      'Fort night exam attempts counts', 'Fort Night Exam attempts',
+      'Fort Night Exam Attempts', 'Fort Night Exam attempts count',
+      'fortNightExamAttempts', 'fortNightExamAttempt', 'fort night exam attempts counts'
+    ]) || {};
+    
+    const fortNightExamAvgScores = findValueByVariations(reportData, [
+      'Fort night exam score Average(In Percentage)', 'Fort night exam score Average',
+      'Fort Night Exam score Average in %', 'Fort Night Exam avg scores',
+      'Fort Night Exam Avg Scores', 'Fort Night Exam Average',
+      'fortNightExamAvgScores', 'fortNightExamAvgScore', 'fortNightExamAverage',
+      'fort night exam score average', 'fort night exam average'
+    ]) || {};
+    
+    // Course Exam
+    const courseExamAttempts = findValueByVariations(reportData, [
+      'Course Exam attempts', 'Course Exam Attempts', 'courseExamAttempts',
+      'courseExamAttempt', 'course exam attempts'
+    ]) || {};
+    
+    const courseExamScores = findValueByVariations(reportData, [
+      'Course Exam score in %', 'Course Exam scores', 'Course Exam Scores',
+      'Course Exam score', 'courseExamScores', 'courseExamScore',
+      'course exam score', 'course exam scores'
+    ]) || {};
+    
+    // Weeks data
+    const weeksExpected = findValueByVariations(reportData, [
+      'No.of weeks expected complete the course', 'No of weeks expected complete the course',
+      'No.of weeks expected', 'weeksExpected', 'weeks_expected',
+      'no of weeks expected', 'weeks expected'
+    ]) || {};
+    
+    const weeksTaken = findValueByVariations(reportData, [
+      'No.of weeks taken complete the course', 'No of weeks taken complete the course',
+      'No.of weeks taken', 'weeksTaken', 'weeks_taken',
+      'no of weeks taken', 'weeks taken'
+    ]) || {};
+    
+    // Demo data
+    const onlineDemoCounts = findValueByVariations(reportData, [
+      'Online demo counts', 'Online Demo counts', 'Online Demo Counts',
+      'onlineDemoCounts', 'onlineDemoCount', 'online demo counts'
+    ]) || {};
+    
+    const onlineDemoRatings = findValueByVariations(reportData, [
+      'Online demo ratings Average', 'Online Demo ratings Average',
+      'Online Demo Ratings Average', 'onlineDemoRatings', 'onlineDemoRating',
+      'online demo ratings average', 'online demo ratings'
+    ]) || {};
+    
+    const offlineDemoCounts = findValueByVariations(reportData, [
+      'Offline demo counts', 'Offline Demo counts', 'Offline Demo Counts',
+      'offlineDemoCounts', 'offlineDemoCount', 'offline demo counts'
+    ]) || {};
+    
+    const offlineDemoRatings = findValueByVariations(reportData, [
+      'Offline demo ratings Average', 'Offline Demo ratings Average',
+      'Offline Demo Ratings Average', 'offlineDemoRatings', 'offlineDemoRating',
+      'offline demo ratings average', 'offline demo ratings'
+    ]) || {};
 
     // Get all unique topics from all data sources
     const allTopics = new Set([
@@ -506,9 +611,9 @@ const CandidatePerformanceDashboard = () => {
     const getValue = (obj, key) => {
       if (!obj || typeof obj !== 'object') return null;
       if (obj[key] !== undefined && obj[key] !== null) return obj[key];
-      const lowerKey = key.toLowerCase();
+      const lowerKey = key.toLowerCase().trim();
       for (const k in obj) {
-        if (k.toLowerCase() === lowerKey && obj[k] !== null && obj[k] !== undefined) {
+        if (k.toLowerCase().trim() === lowerKey && obj[k] !== null && obj[k] !== undefined) {
           return obj[k];
         }
       }
@@ -532,8 +637,44 @@ const CandidatePerformanceDashboard = () => {
     const getScoreValue = (obj, key) => {
       const val = getValue(obj, key);
       if (val === null || val === undefined || val === '') return null;
+      
+      // Handle text values that should be treated as N/A
+      if (typeof val === 'string') {
+        const lowerVal = val.toLowerCase().trim();
+        // Check for various text patterns that indicate no data
+        if (lowerVal === 'not attempted' || 
+            lowerVal === 'notattempted' ||
+            lowerVal === 'rating didn\'t given' || 
+            lowerVal === 'rating didn\'t given' ||
+            lowerVal === 'rating not given' ||
+            lowerVal === 'yet to give demo' ||
+            lowerVal === 'yettogivedemo' ||
+            lowerVal === 'n/a' ||
+            lowerVal === 'na' ||
+            lowerVal === 'null' ||
+            lowerVal === 'undefined' ||
+            lowerVal === '-' ||
+            lowerVal === '--' ||
+            lowerVal === 'tbd' ||
+            lowerVal === 'pending') {
+          return null;
+        }
+      }
+      
+      // Try to parse as number
       const num = Number(val);
-      return isNaN(num) ? null : num;
+      if (isNaN(num)) {
+        // If not a number, try to extract number from string (e.g., "91%" -> 91)
+        if (typeof val === 'string') {
+          const numMatch = val.match(/[\d.]+/);
+          if (numMatch) {
+            const extractedNum = Number(numMatch[0]);
+            return isNaN(extractedNum) ? null : extractedNum;
+          }
+        }
+        return null;
+      }
+      return num;
     };
 
     const getScoreColor = (score, type = 'avg') => {
@@ -1034,19 +1175,117 @@ const CandidatePerformanceDashboard = () => {
     }
 
     const reportData = performanceData.interactionsReport.reportData;
+    
+    // Handle both array and object formats
+    const interactions = Array.isArray(reportData) ? reportData : (reportData && typeof reportData === 'object' ? Object.values(reportData).flat() : []);
+
+    // Helper to format date
+    const formatDate = (dateString) => {
+      if (!dateString) return 'N/A';
+      try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return dateString;
+        return date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      } catch (e) {
+        return dateString;
+      }
+    };
+
+    // Helper to get severity color
+    const getSeverityColor = (count) => {
+      const num = Number(count) || 0;
+      if (num === 0) return 'bg-green-100 text-green-700 border-green-200';
+      if (num <= 2) return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      return 'bg-red-100 text-red-700 border-red-200';
+    };
 
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-          <LuActivity className="mr-2" />
-          Interactions Report
-        </h3>
-        
-        <div className="bg-gray-50 p-4 rounded-lg">
-          <pre className="text-sm text-gray-700 whitespace-pre-wrap overflow-x-auto">
-            {JSON.stringify(reportData, null, 2)}
-          </pre>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+            <LuActivity className="mr-2" />
+            Interactions Report
+          </h3>
+          {interactions.length > 0 && (
+            <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
+              {interactions.length} {interactions.length === 1 ? 'Interaction' : 'Interactions'}
+            </span>
+          )}
         </div>
+
+        {interactions.length > 0 ? (
+          <div className="space-y-4">
+            {interactions.map((interaction, index) => (
+              <div
+                key={index}
+                className="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Left Column */}
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1">Deviation Type</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        {interaction.deviation || interaction.devation || 'N/A'}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1">Category</p>
+                      <p className="text-sm text-gray-700">
+                        {interaction.category || 'N/A'}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1">Date & Time</p>
+                      <p className="text-sm text-gray-700">
+                        {formatDate(interaction.date_time || interaction.dateTime)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right Column */}
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1">Times Mentioned</p>
+                      <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium border ${getSeverityColor(interaction.how_may_times_we_are_saying || interaction.howManyTimesWeAreSaying || interaction.times_mentioned || 0)}`}>
+                        {interaction.how_may_times_we_are_saying || interaction.howManyTimesWeAreSaying || interaction.times_mentioned || 0}
+                      </span>
+                    </div>
+                    
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1">Said Orally</p>
+                      <p className="text-sm text-gray-700">
+                        {interaction.saying_orally || interaction.sayingOrally || 'N/A'}
+                      </p>
+                    </div>
+                    
+                    {interaction.saying_oral_remarks || interaction.sayingOralRemarks ? (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 mb-1">Oral Remarks</p>
+                        <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded border">
+                          {interaction.saying_oral_remarks || interaction.sayingOralRemarks}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 text-gray-500">
+            <LuActivity className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+            <p>No interactions recorded</p>
+          </div>
+        )}
       </div>
     );
   };
