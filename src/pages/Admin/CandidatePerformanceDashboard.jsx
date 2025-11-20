@@ -29,6 +29,7 @@ const CandidatePerformanceDashboard = () => {
   const [performanceData, setPerformanceData] = useState(null);
   const [activeTab, setActiveTab] = useState('personal-details');
   const [showDetailView, setShowDetailView] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState('');
 
   useEffect(() => {
     fetchCandidates();
@@ -74,10 +75,28 @@ const CandidatePerformanceDashboard = () => {
     setSelectedCandidate(candidate);
     setShowDetailView(true);
     setActiveTab('personal-details');
+    setSelectedCourse(''); // Reset selected course when switching candidates
     if (candidate.author_id) {
       fetchCandidatePerformance(candidate.author_id);
     }
   };
+
+  // Set default selected course when learning report data loads
+  useEffect(() => {
+    if (performanceData?.learningReport?.reportData) {
+      const reportData = performanceData.learningReport.reportData;
+      const skills = reportData.skills || [];
+      const dailyQuizCounts = reportData['Daily Quiz counts'] || reportData['Daily Quiz Counts'] || {};
+      const allTopics = new Set([
+        ...skills,
+        ...Object.keys(dailyQuizCounts)
+      ]);
+      const topicsArray = Array.from(allTopics);
+      if (!selectedCourse && topicsArray.length > 0) {
+        setSelectedCourse(topicsArray[0]);
+      }
+    }
+  }, [performanceData?.learningReport]);
 
   const handleBack = () => {
     setShowDetailView(false);
@@ -447,7 +466,6 @@ const CandidatePerformanceDashboard = () => {
     const skills = reportData.skills || [];
     
     // Extract data for each skill/topic - handle multiple field name variations
-    // Check all possible field name variations from the Google Apps Script
     const dailyQuizCounts = reportData['Daily Quiz counts'] || reportData['Daily Quiz Counts'] || reportData['Daily Quiz count'] || reportData.dailyQuizCounts || reportData.dailyQuizCount || {};
     const dailyQuizAttempts = reportData['Daily Quiz attempts count'] || reportData['Daily Quiz Attempts'] || reportData['Daily Quiz attempts'] || reportData.dailyQuizAttempts || reportData.dailyQuizAttempt || {};
     const dailyQuizAvgScores = reportData['Daily Quiz score Average in %'] || reportData['Daily Quiz avg scores'] || reportData['Daily Quiz Avg Scores'] || reportData['Daily Quiz Average'] || reportData.dailyQuizAvgScores || reportData.dailyQuizAvgScore || reportData.dailyQuizAverage || {};
@@ -459,22 +477,15 @@ const CandidatePerformanceDashboard = () => {
     const courseExamAttempts = reportData['Course Exam attempts'] || reportData['Course Exam Attempts'] || reportData.courseExamAttempts || reportData.courseExamAttempt || {};
     const courseExamScores = reportData['Course Exam score in %'] || reportData['Course Exam scores'] || reportData['Course Exam Scores'] || reportData['Course Exam score'] || reportData.courseExamScores || reportData.courseExamScore || {};
     
-    // Debug: Log all available keys to understand the data structure
-    const allKeys = Object.keys(reportData);
-    if (allKeys.length > 0) {
-      console.log('Available keys in learningReport.reportData:', allKeys);
-      console.log('Sample data structure:', JSON.stringify(reportData, null, 2).substring(0, 1000));
-      // Log specific score data to debug
-      if (reportData['Daily Quiz score Average in %']) {
-        console.log('Daily Quiz score Average in %:', reportData['Daily Quiz score Average in %']);
-      }
-      if (reportData['Fort Night Exam score Average']) {
-        console.log('Fort Night Exam score Average:', reportData['Fort Night Exam score Average']);
-      }
-      if (reportData['Course Exam score in %']) {
-        console.log('Course Exam score in %:', reportData['Course Exam score in %']);
-      }
-    }
+    // Extract weeks data - handle multiple field name variations
+    const weeksExpected = reportData['No.of weeks expected complete the course'] || reportData['No of weeks expected complete the course'] || reportData['No.of weeks expected'] || reportData.weeksExpected || reportData.weeks_expected || {};
+    const weeksTaken = reportData['No.of weeks taken complete the course'] || reportData['No of weeks taken complete the course'] || reportData['No.of weeks taken'] || reportData.weeksTaken || reportData.weeks_taken || {};
+    
+    // Extract demo data - handle multiple field name variations
+    const onlineDemoCounts = reportData['Online demo counts'] || reportData['Online Demo counts'] || reportData['Online Demo Counts'] || reportData.onlineDemoCounts || reportData.onlineDemoCount || {};
+    const onlineDemoRatings = reportData['Online demo ratings Average'] || reportData['Online Demo ratings Average'] || reportData['Online Demo Ratings Average'] || reportData.onlineDemoRatings || reportData.onlineDemoRating || {};
+    const offlineDemoCounts = reportData['Offline demo counts'] || reportData['Offline Demo counts'] || reportData['Offline Demo Counts'] || reportData.offlineDemoCounts || reportData.offlineDemoCount || {};
+    const offlineDemoRatings = reportData['Offline demo ratings Average'] || reportData['Offline Demo ratings Average'] || reportData['Offline Demo Ratings Average'] || reportData.offlineDemoRatings || reportData.offlineDemoRating || {};
 
     // Get all unique topics from all data sources
     const allTopics = new Set([
@@ -489,32 +500,42 @@ const CandidatePerformanceDashboard = () => {
       ...Object.keys(courseExamScores)
     ]);
 
-    // Color mapping for topics
-    const topicColors = {
-      'Static': 'bg-blue-500',
-      'Static HTML/CSS': 'bg-blue-500',
-      'Responsive': 'bg-purple-500',
-      'Responsive Design': 'bg-purple-500',
-      'Modern Responsive': 'bg-pink-500',
-      'Dynamic': 'bg-green-500',
-      'Dynamic JS': 'bg-green-500',
-      'Python': 'bg-yellow-500',
-      'SQL': 'bg-indigo-500',
-      'JS': 'bg-yellow-400',
-      'Node JS': 'bg-green-600',
-      'React JS': 'bg-cyan-500',
-      'Mini projects': 'bg-orange-500'
+    const topicsArray = Array.from(allTopics);
+
+    // Helper functions
+    const getValue = (obj, key) => {
+      if (!obj || typeof obj !== 'object') return null;
+      if (obj[key] !== undefined && obj[key] !== null) return obj[key];
+      const lowerKey = key.toLowerCase();
+      for (const k in obj) {
+        if (k.toLowerCase() === lowerKey && obj[k] !== null && obj[k] !== undefined) {
+          return obj[k];
+        }
+      }
+      return null;
     };
 
-    // Get status based on average scores
-    const getStatus = (avgScore) => {
-      if (!avgScore || avgScore === 0) return { label: 'No Data', color: 'bg-gray-100 text-gray-600' };
-      if (avgScore >= 80) return { label: 'Excellent', color: 'bg-blue-100 text-blue-700' };
-      if (avgScore >= 60) return { label: 'Good', color: 'bg-yellow-100 text-yellow-700' };
-      return { label: 'Needs Improvement', color: 'bg-gray-100 text-gray-600' };
+    const formatScore = (value) => {
+      if (value === null || value === undefined || value === '') return 'N/A';
+      if (typeof value === 'number') return value;
+      const numValue = Number(value);
+      return isNaN(numValue) ? 'N/A' : numValue;
     };
 
-    // Get score color
+    const getNumericValue = (obj, key) => {
+      const val = getValue(obj, key);
+      if (val === null || val === undefined || val === '') return 0;
+      const num = Number(val);
+      return isNaN(num) ? 0 : num;
+    };
+
+    const getScoreValue = (obj, key) => {
+      const val = getValue(obj, key);
+      if (val === null || val === undefined || val === '') return null;
+      const num = Number(val);
+      return isNaN(num) ? null : num;
+    };
+
     const getScoreColor = (score, type = 'avg') => {
       if (!score || score === 0) return 'text-gray-500';
       if (type === 'course') return 'text-blue-600';
@@ -523,191 +544,214 @@ const CandidatePerformanceDashboard = () => {
       return 'text-red-600';
     };
 
-    // Format topic name for display
-    const formatTopicName = (topic) => {
-      const nameMap = {
-        'Static': 'Static HTML/CSS',
-        'Responsive': 'Responsive Design',
-        'Dynamic': 'Dynamic JS'
-      };
-      return nameMap[topic] || topic;
+    const getStatus = (avgScore) => {
+      if (!avgScore || avgScore === 0) return { label: 'No Data', color: 'bg-gray-100 text-gray-600' };
+      if (avgScore >= 80) return { label: 'Excellent', color: 'bg-blue-100 text-blue-700' };
+      if (avgScore >= 60) return { label: 'Good', color: 'bg-yellow-100 text-yellow-700' };
+      return { label: 'Needs Improvement', color: 'bg-gray-100 text-gray-600' };
     };
+
+    // Get selected course data
+    const getSelectedCourseData = () => {
+      if (!selectedCourse || !allTopics.has(selectedCourse)) return null;
+
+      const topicKey = selectedCourse;
+      const dailyQuizCount = getNumericValue(dailyQuizCounts, topicKey) || getNumericValue(dailyQuizCounts, selectedCourse) || 0;
+      const dailyQuizAttempt = getNumericValue(dailyQuizAttempts, topicKey) || getNumericValue(dailyQuizAttempts, selectedCourse) || 0;
+      const dailyQuizAvgScore = getScoreValue(dailyQuizAvgScores, topicKey) ?? getScoreValue(dailyQuizAvgScores, selectedCourse);
+      
+      const fortNightCount = getNumericValue(fortNightExamCounts, topicKey) || getNumericValue(fortNightExamCounts, selectedCourse) || 0;
+      const fortNightAttempt = getNumericValue(fortNightExamAttempts, topicKey) || getNumericValue(fortNightExamAttempts, selectedCourse) || 0;
+      const fortNightAvgScore = getScoreValue(fortNightExamAvgScores, topicKey) ?? getScoreValue(fortNightExamAvgScores, selectedCourse);
+      
+      const courseAttempt = getNumericValue(courseExamAttempts, topicKey) || getNumericValue(courseExamAttempts, selectedCourse) || 0;
+      const courseScore = getScoreValue(courseExamScores, topicKey) ?? getScoreValue(courseExamScores, selectedCourse);
+
+      // Get weeks data for this course
+      const weeksExpectedValue = getValue(weeksExpected, topicKey) ?? getValue(weeksExpected, selectedCourse);
+      const weeksTakenValue = getValue(weeksTaken, topicKey) ?? getValue(weeksTaken, selectedCourse);
+
+      // Get demo data for this course
+      const onlineDemoCount = getNumericValue(onlineDemoCounts, topicKey) || getNumericValue(onlineDemoCounts, selectedCourse) || 0;
+      const onlineDemoRating = getScoreValue(onlineDemoRatings, topicKey) ?? getScoreValue(onlineDemoRatings, selectedCourse);
+      const offlineDemoCount = getNumericValue(offlineDemoCounts, topicKey) || getNumericValue(offlineDemoCounts, selectedCourse) || 0;
+      const offlineDemoRating = getScoreValue(offlineDemoRatings, topicKey) ?? getScoreValue(offlineDemoRatings, selectedCourse);
+
+      return {
+        topic: selectedCourse,
+        dailyQuiz: { count: dailyQuizCount, attempt: dailyQuizAttempt, score: dailyQuizAvgScore },
+        fortNight: { count: fortNightCount, attempt: fortNightAttempt, score: fortNightAvgScore },
+        course: { attempt: courseAttempt, score: courseScore },
+        weeksExpected: weeksExpectedValue,
+        weeksTaken: weeksTakenValue,
+        onlineDemo: { count: onlineDemoCount, rating: onlineDemoRating },
+        offlineDemo: { count: offlineDemoCount, rating: offlineDemoRating }
+      };
+    };
+
+    const selectedCourseData = getSelectedCourseData();
 
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        {/* Course Dropdown */}
+        {allTopics.size > 0 && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Course
+            </label>
+            <select
+              value={selectedCourse}
+              onChange={(e) => setSelectedCourse(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+            >
+              {topicsArray.map((topic) => (
+                <option key={topic} value={topic}>
+                  {topic}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
+        {/* Selected Course Display */}
+        {selectedCourseData ? (
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-lg font-semibold text-gray-900">{selectedCourseData.topic}</h4>
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatus(selectedCourseData.fortNight.score).color}`}>
+                {getStatus(selectedCourseData.fortNight.score).label}
+              </span>
+            </div>
 
-        {/* Skills Cards Grid */}
-        {allTopics.size > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {Array.from(allTopics).map((topic, index) => {
-              const topicKey = topic;
-              const displayName = formatTopicName(topic);
-              const colorClass = topicColors[topic] || topicColors[topicKey] || 'bg-gray-500';
-              
-              // Try multiple variations of topic key matching - returns value even if empty string
-              const getValue = (obj, key) => {
-                if (!obj || typeof obj !== 'object') return null;
-                // Try exact match first - include empty strings
-                if (obj[key] !== undefined && obj[key] !== null) return obj[key];
-                // Try case-insensitive match - include empty strings
-                const lowerKey = key.toLowerCase();
-                for (const k in obj) {
-                  if (k.toLowerCase() === lowerKey && obj[k] !== null && obj[k] !== undefined) {
-                    return obj[k];
-                  }
-                }
-                return null;
-              };
-              
-              // Helper to format score display
-              const formatScore = (value) => {
-                if (value === null || value === undefined || value === '') return 'N/A';
-                if (typeof value === 'number') {
-                  // 0 is a valid score, only return N/A if it's actually null/undefined/empty
-                  return value;
-                }
-                const numValue = Number(value);
-                return isNaN(numValue) ? 'N/A' : numValue;
-              };
-              
-              // Helper to get numeric value or 0 - handles empty strings as 0
-              const getNumericValue = (obj, key) => {
-                const val = getValue(obj, key);
-                if (val === null || val === undefined || val === '') return 0;
-                const num = Number(val);
-                return isNaN(num) ? 0 : num;
-              };
-              
-              // Helper to get score value - handles empty strings as null, but preserves 0 as valid value
-              const getScoreValue = (obj, key) => {
-                const val = getValue(obj, key);
-                // If value doesn't exist or is empty string, return null (will show as N/A)
-                if (val === null || val === undefined || val === '') return null;
-                // Convert to number - 0 is a valid score, only return null if NaN
-                const num = Number(val);
-                // If it's NaN or if it's an empty string that got converted to 0, return null
-                // But if it's actually 0 (numeric), return 0
-                if (isNaN(num)) return null;
-                // Return the number (including 0)
-                return num;
-              };
-              
-              // Get values for this topic - try both topicKey and topic variations
-              const dailyQuizCount = getNumericValue(dailyQuizCounts, topicKey) || getNumericValue(dailyQuizCounts, topic) || 0;
-              const dailyQuizAttempt = getNumericValue(dailyQuizAttempts, topicKey) || getNumericValue(dailyQuizAttempts, topic) || 0;
-              const dailyQuizAvgScore = getScoreValue(dailyQuizAvgScores, topicKey) ?? getScoreValue(dailyQuizAvgScores, topic);
-              
-              const fortNightCount = getNumericValue(fortNightExamCounts, topicKey) || getNumericValue(fortNightExamCounts, topic) || 0;
-              const fortNightAttempt = getNumericValue(fortNightExamAttempts, topicKey) || getNumericValue(fortNightExamAttempts, topic) || 0;
-              const fortNightAvgScore = getScoreValue(fortNightExamAvgScores, topicKey) ?? getScoreValue(fortNightExamAvgScores, topic);
-              
-              const courseAttempt = getNumericValue(courseExamAttempts, topicKey) || getNumericValue(courseExamAttempts, topic) || 0;
-              const courseScore = getScoreValue(courseExamScores, topicKey) ?? getScoreValue(courseExamScores, topic);
-              
-              // Determine overall status based on daily quiz avg score
-              const status = getStatus(fortNightAvgScore)
-              
-              // Debug for this topic - show first 3 topics
-              if (index < 3) {
-                console.log(`Topic: ${topic} (key: ${topicKey})`, {
-                  dailyQuizCounts_obj: dailyQuizCounts,
-                  dailyQuizCounts_topicKey: dailyQuizCounts[topicKey],
-                  dailyQuizCounts_topic: dailyQuizCounts[topic],
-                  dailyQuizCount,
-                  dailyQuizAttempt,
-                  dailyQuizAvgScores_obj: dailyQuizAvgScores,
-                  dailyQuizAvgScores_topicKey: dailyQuizAvgScores[topicKey],
-                  dailyQuizAvgScores_topic: dailyQuizAvgScores[topic],
-                  dailyQuizAvgScore,
-                  fortNightCount,
-                  fortNightAttempt,
-                  fortNightAvgScore,
-                  courseAttempt,
-                  courseScore
-                });
-              }
-
-              return (
-                <div key={index} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                  {/* Header */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-4 h-4 rounded-full ${colorClass}`}></div>
-                      <h4 className="text-lg font-semibold text-gray-900">{displayName}</h4>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${status.color}`}>
-                      {status.label}
-                    </span>
-                  </div>
-
-                  {/* Daily Quiz Section */}
-                  <div className="mb-4 pb-4 border-b border-gray-200">
-                    <h5 className="text-sm font-semibold text-gray-700 mb-3">DAILY QUIZ</h5>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Counts</p>
-                        <p className="text-sm font-semibold text-gray-900">{dailyQuizCount}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Attempts</p>
-                        <p className="text-sm font-semibold text-gray-900">{dailyQuizAttempt}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Avg Score</p>
-                        <p className={`text-sm font-semibold ${getScoreColor(dailyQuizAvgScore)}`}>
-                          {formatScore(dailyQuizAvgScore) === 'N/A' ? 'N/A' : `${Math.round(formatScore(dailyQuizAvgScore))}%`}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Fort Night Exam Section - Always show */}
-                  <div className="mb-4 pb-4 border-b border-gray-200">
-                    <h5 className="text-sm font-semibold text-gray-700 mb-3">FORT NIGHT EXAM</h5>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Counts</p>
-                        <p className="text-sm font-semibold text-gray-900">{fortNightCount}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Attempts</p>
-                        <p className="text-sm font-semibold text-gray-900">{fortNightAttempt}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Avg Score</p>
-                        <p className={`text-sm font-semibold ${getScoreColor(fortNightAvgScore)}`}>
-                          {formatScore(fortNightAvgScore) === 'N/A' ? 'N/A' : `${Math.round(formatScore(fortNightAvgScore))}%`}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Course Exam Section - Always show */}
+            {/* Compact Grid Layout - All sections in one view */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Course Completion */}
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <h5 className="text-xs font-semibold text-gray-700 mb-2">COURSE COMPLETION</h5>
+                <div className="space-y-2">
                   <div>
-                    <h5 className="text-sm font-semibold text-gray-700 mb-3">COURSE EXAM</h5>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Attempts</p>
-                        <p className="text-sm font-semibold text-gray-900">{courseAttempt}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Score</p>
-                        <p className={`text-sm font-semibold ${getScoreColor(courseScore, 'course')}`}>
-                          {formatScore(courseScore) === 'N/A' ? 'N/A' : `${Math.round(formatScore(courseScore))}%`}
-                        </p>
-                      </div>
-                    </div>
+                    <p className="text-xs text-gray-500 mb-0.5">Weeks Expected</p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {selectedCourseData.weeksExpected !== null && selectedCourseData.weeksExpected !== undefined && selectedCourseData.weeksExpected !== '' 
+                        ? selectedCourseData.weeksExpected 
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Weeks Taken</p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {selectedCourseData.weeksTaken !== null && selectedCourseData.weeksTaken !== undefined && selectedCourseData.weeksTaken !== '' 
+                        ? selectedCourseData.weeksTaken 
+                        : 'N/A'}
+                    </p>
                   </div>
                 </div>
-              );
-            })}
+              </div>
+
+              {/* Daily Quiz */}
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <h5 className="text-xs font-semibold text-gray-700 mb-2">DAILY QUIZ</h5>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Count</p>
+                    <p className="text-sm font-semibold text-gray-900">{selectedCourseData.dailyQuiz.count}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Attempts</p>
+                    <p className="text-sm font-semibold text-gray-900">{selectedCourseData.dailyQuiz.attempt}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Avg Score</p>
+                    <p className={`text-sm font-semibold ${getScoreColor(selectedCourseData.dailyQuiz.score)}`}>
+                      {formatScore(selectedCourseData.dailyQuiz.score) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.dailyQuiz.score))}%`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fort Night Exam */}
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <h5 className="text-xs font-semibold text-gray-700 mb-2">FORT NIGHT EXAM</h5>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Count</p>
+                    <p className="text-sm font-semibold text-gray-900">{selectedCourseData.fortNight.count}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Attempts</p>
+                    <p className="text-sm font-semibold text-gray-900">{selectedCourseData.fortNight.attempt}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Avg Score</p>
+                    <p className={`text-sm font-semibold ${getScoreColor(selectedCourseData.fortNight.score)}`}>
+                      {formatScore(selectedCourseData.fortNight.score) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.fortNight.score))}%`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Course Exam */}
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <h5 className="text-xs font-semibold text-gray-700 mb-2">COURSE EXAM</h5>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Attempts</p>
+                    <p className="text-sm font-semibold text-gray-900">{selectedCourseData.course.attempt}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Score</p>
+                    <p className={`text-sm font-semibold ${getScoreColor(selectedCourseData.course.score, 'course')}`}>
+                      {formatScore(selectedCourseData.course.score) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.course.score))}%`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Online Demo */}
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <h5 className="text-xs font-semibold text-gray-700 mb-2">ONLINE DEMO</h5>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Count</p>
+                    <p className="text-sm font-semibold text-gray-900">{selectedCourseData.onlineDemo.count}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Rating Avg</p>
+                    <p className={`text-sm font-semibold ${getScoreColor(selectedCourseData.onlineDemo.rating)}`}>
+                      {formatScore(selectedCourseData.onlineDemo.rating) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.onlineDemo.rating))}%`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Offline Demo */}
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <h5 className="text-xs font-semibold text-gray-700 mb-2">OFFLINE DEMO</h5>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Count</p>
+                    <p className="text-sm font-semibold text-gray-900">{selectedCourseData.offlineDemo.count}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Rating Avg</p>
+                    <p className={`text-sm font-semibold ${getScoreColor(selectedCourseData.offlineDemo.rating)}`}>
+                      {formatScore(selectedCourseData.offlineDemo.rating) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.offlineDemo.rating))}%`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        ) : (
+        ) : allTopics.size === 0 ? (
           <div className="bg-gray-50 p-4 rounded-lg">
             <pre className="text-sm text-gray-700 whitespace-pre-wrap overflow-x-auto">
               {JSON.stringify(reportData, null, 2)}
             </pre>
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-gray-500">Please select a course from the dropdown</p>
           </div>
         )}
       </div>
@@ -1037,9 +1081,23 @@ const CandidatePerformanceDashboard = () => {
               <LuDownload className="w-4 h-4" />
               <span>Download Data</span>
             </button>
-            <span className="px-4 py-2 bg-green-100 text-green-700 rounded-lg font-medium text-sm">
-              Working
-            </span>
+            {(() => {
+              // Check isActive from performanceData first, then fallback to selectedCandidate
+              const isActive = performanceData?.personalDetails?.isActive !== undefined 
+                ? performanceData.personalDetails.isActive 
+                : (selectedCandidate?.isActive !== undefined ? selectedCandidate.isActive : true);
+              const isWorking = isActive === true;
+              
+              return (
+                <span className={`px-4 py-2 rounded-lg font-medium text-sm ${
+                  isWorking 
+                    ? 'bg-green-100 text-green-700' 
+                    : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {isWorking ? 'Working' : 'Not Working'}
+                </span>
+              );
+            })()}
           </div>
         </div>
 
