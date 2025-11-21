@@ -10,6 +10,18 @@ const AccountActivation = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [statistics, setStatistics] = useState({
+    total: 0,
+    active: 0,
+    inactive: 0,
+    trainers: 0,
+    trainees: 0,
+    admins: 0
+  });
+  const itemsPerPage = 10;
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createForm, setCreateForm] = useState({
     author_id: '',
@@ -41,9 +53,30 @@ const AccountActivation = () => {
 
   useEffect(() => {
     fetchAllUsers();
-  }, []);
+    fetchStatistics(); // Fetch statistics separately
+  }, [currentPage, searchTerm, roleFilter, statusFilter]);
 
-  // Filter users based on search term and filters
+  // Fetch statistics separately (all users for accurate counts)
+  const fetchStatistics = async () => {
+    try {
+      // Fetch all users for statistics (with high limit)
+      const response = await axiosInstance.get(`${API_PATHS.ADMIN.USERS}?status=all&limit=1000`);
+      const allUsersForStats = response.data.users || [];
+      
+      setStatistics({
+        total: response.data.total || 0,
+        active: allUsersForStats.filter(u => u.isActive).length,
+        inactive: allUsersForStats.filter(u => !u.isActive).length,
+        trainers: allUsersForStats.filter(u => u.role === 'trainer').length,
+        trainees: allUsersForStats.filter(u => u.role === 'trainee').length,
+        admins: allUsersForStats.filter(u => u.role === 'admin').length
+      });
+    } catch (error) {
+      console.error('Error fetching statistics:', error);
+    }
+  };
+
+  // Filter users based on search term and filters (client-side for statistics)
   useEffect(() => {
     let filtered = allUsers;
 
@@ -78,12 +111,38 @@ const AccountActivation = () => {
   const fetchAllUsers = async () => {
     try {
       setLoading(true);
-      // Fetch all users (both active and inactive) for accurate statistics
-      const response = await axiosInstance.get(API_PATHS.ADMIN.USERS + '?status=all&limit=100');
+      
+      // Build query parameters
+      const params = new URLSearchParams();
+      params.append('status', statusFilter || 'all');
+      params.append('page', currentPage.toString());
+      params.append('limit', itemsPerPage.toString());
+      if (roleFilter) params.append('role', roleFilter);
+      if (searchTerm) {
+        // For search, we'll filter client-side after fetching
+        // But we can also pass it as a query param if backend supports it
+      }
+      
+      const response = await axiosInstance.get(`${API_PATHS.ADMIN.USERS}?${params.toString()}`);
       const users = response.data.users || [];
+      const total = response.data.total || 0;
+      const totalPagesCount = response.data.totalPages || 1;
+      
       setAllUsers(users);
-      // Let the useEffect handle filtering based on current filters
-      // This will show all users by default since statusFilter is empty string initially
+      setTotalUsers(total);
+      setTotalPages(totalPagesCount);
+      
+      // Apply client-side search filter if needed
+      if (searchTerm) {
+        const filtered = users.filter(user => 
+          user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          user.author_id?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        setFilteredUsers(filtered);
+      } else {
+        setFilteredUsers(users);
+      }
     } catch (error) {
       console.error('Error fetching users:', error);
     } finally {
@@ -365,36 +424,36 @@ const AccountActivation = () => {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">User Statistics</h3>
           <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">{allUsers.length}</div>
+              <div className="text-2xl font-bold text-gray-900">{statistics.total}</div>
               <div className="text-sm text-gray-500">Total Users</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-green-600">
-                {allUsers.filter(u => u.isActive).length}
+                {statistics.active}
               </div>
               <div className="text-sm text-gray-500">Active</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-red-600">
-                {allUsers.filter(u => !u.isActive).length}
+                {statistics.inactive}
               </div>
               <div className="text-sm text-gray-500">Inactive</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-blue-600">
-                {allUsers.filter(u => u.role === 'trainer').length}
+                {statistics.trainers}
               </div>
               <div className="text-sm text-gray-500">Trainers</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-green-600">
-                {allUsers.filter(u => u.role === 'trainee').length}
+                {statistics.trainees}
               </div>
               <div className="text-sm text-gray-500">Trainees</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-purple-600">
-                {allUsers.filter(u => u.role === 'admin').length}
+                {statistics.admins}
               </div>
               <div className="text-sm text-gray-500">Admins</div>
             </div>
@@ -418,7 +477,10 @@ const AccountActivation = () => {
                   type="text"
                   placeholder="Search by name, email, or ID..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1); // Reset to first page when searching
+                  }}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <LuSearch className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
@@ -433,7 +495,10 @@ const AccountActivation = () => {
               </label>
               <select
                 value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
+                onChange={(e) => {
+                  setRoleFilter(e.target.value);
+                  setCurrentPage(1); // Reset to first page when filtering
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">All Roles</option>
@@ -452,7 +517,10 @@ const AccountActivation = () => {
               </label>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1); // Reset to first page when filtering
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">All Status</option>
@@ -469,6 +537,7 @@ const AccountActivation = () => {
                   setSearchTerm('');
                   setRoleFilter('');
                   setStatusFilter('');
+                  setCurrentPage(1); // Reset to first page when clearing filters
                 }}
                 className="w-full px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
               >
@@ -486,7 +555,7 @@ const AccountActivation = () => {
               All Users ({filteredUsers.length})
             </h3>
             <div className="text-sm text-gray-500">
-              Showing {filteredUsers.length} of {allUsers.length} users
+              Showing {filteredUsers.length} of {totalUsers} users
               {searchTerm && (
                 <span className="ml-2 text-blue-600">
                   • Searching for "{searchTerm}"
@@ -622,6 +691,95 @@ const AccountActivation = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-sm text-gray-500">
+              Page {currentPage} of {totalPages}
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              
+              {/* Smart pagination with ellipsis */}
+              {(() => {
+                const pages = [];
+                const maxVisible = 7; // Maximum number of page buttons to show
+                
+                if (totalPages <= maxVisible) {
+                  // Show all pages if total is small
+                  for (let i = 1; i <= totalPages; i++) {
+                    pages.push(i);
+                  }
+                } else {
+                  // Always show first page
+                  pages.push(1);
+                  
+                  if (currentPage <= 4) {
+                    // Near the beginning: 1 2 3 4 5 ... last
+                    for (let i = 2; i <= 5; i++) {
+                      pages.push(i);
+                    }
+                    pages.push('ellipsis');
+                    pages.push(totalPages);
+                  } else if (currentPage >= totalPages - 3) {
+                    // Near the end: 1 ... (n-4) (n-3) (n-2) (n-1) n
+                    pages.push('ellipsis');
+                    for (let i = totalPages - 4; i <= totalPages; i++) {
+                      pages.push(i);
+                    }
+                  } else {
+                    // In the middle: 1 ... (current-1) current (current+1) ... last
+                    pages.push('ellipsis');
+                    pages.push(currentPage - 1);
+                    pages.push(currentPage);
+                    pages.push(currentPage + 1);
+                    pages.push('ellipsis');
+                    pages.push(totalPages);
+                  }
+                }
+                
+                return pages.map((page, index) => {
+                  if (page === 'ellipsis') {
+                    return (
+                      <span key={`ellipsis-${index}`} className="px-2 text-gray-500">
+                        ...
+                      </span>
+                    );
+                  }
+                  
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-4 py-2 border rounded-md text-sm font-medium ${
+                        currentPage === page
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                });
+              })()}
+              
+              <button
+                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>

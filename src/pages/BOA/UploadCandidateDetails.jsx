@@ -15,7 +15,8 @@ const UploadCandidateDetails = () => {
   // Bulk upload state (like Upload New Joiners Data)
   const [step, setStep] = useState(1); // 1: JSON Config, 2: Review Data, 3: Upload
   const [jsonData, setJsonData] = useState({});
-  const googleSheetUrl = import.meta.env.VITE_CANDIDATE_REPORTS_SHEET_URL || '';
+  // Single Google Sheet URL (with multiple sub-sheets)
+  const [googleSheetUrl, setGoogleSheetUrl] = useState(import.meta.env.VITE_CANDIDATE_REPORTS_SHEET_URL || '');
   const [reportsData, setReportsData] = useState([]);
   const [validationResult, setValidationResult] = useState(null);
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -56,7 +57,7 @@ const UploadCandidateDetails = () => {
 
     // Check if Google Sheet URL is configured
     if (!googleSheetUrl || !googleSheetUrl.trim()) {
-      setBulkErrors(['Google Sheet URL is not configured. Please set VITE_CANDIDATE_REPORTS_SHEET_URL in your .env file and restart the server.']);
+      setBulkErrors(['Google Sheet URL is required. Please configure VITE_CANDIDATE_REPORTS_SHEET_URL in your .env file or enter it manually.']);
       return;
     }
 
@@ -64,13 +65,6 @@ const UploadCandidateDetails = () => {
     setBulkErrors([]);
 
     try {
-      console.log('Validating with:', {
-        spread_sheet_name: jsonData.spread_sheet_name,
-        data_sets_to_be_loaded: jsonData.data_sets_to_be_loaded,
-        has_google_sheet_url: !!googleSheetUrl,
-        google_sheet_url: googleSheetUrl.substring(0, 50) + '...'
-      });
-
       const requestPayload = {
         spread_sheet_name: jsonData.spread_sheet_name,
         data_sets_to_be_loaded: jsonData.data_sets_to_be_loaded,
@@ -223,7 +217,7 @@ const UploadCandidateDetails = () => {
       const response = await axiosInstance.post(API_PATHS.JOINERS.BULK_UPLOAD_CANDIDATE_REPORTS, {
         spread_sheet_name: jsonData.spread_sheet_name,
         data_sets_to_be_loaded: jsonData.data_sets_to_be_loaded,
-        google_sheet_url: googleSheetUrl || null,
+        google_sheet_url: googleSheetUrl.trim() || null,
         candidate_reports_data: validReports
       });
 
@@ -244,9 +238,22 @@ const UploadCandidateDetails = () => {
       toast.dismiss('validating');
       toast.dismiss('uploading');
       console.error('Upload error:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to upload candidate reports data';
+      console.error('Error response:', error.response?.data);
+      
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to upload candidate reports data';
       const errorDetails = error.response?.data?.errors || [];
-      setBulkErrors([errorMessage, ...errorDetails]);
+      const errorStack = error.response?.data?.stack;
+      
+      // Build comprehensive error list
+      const allErrors = [errorMessage];
+      if (errorDetails && Array.isArray(errorDetails) && errorDetails.length > 0) {
+        allErrors.push(...errorDetails);
+      }
+      if (errorStack && process.env.NODE_ENV === 'development') {
+        allErrors.push(`Stack: ${errorStack.split('\n')[0]}`);
+      }
+      
+      setBulkErrors(allErrors);
       toast.error(errorMessage);
     } finally {
       setBulkLoading(false);
@@ -280,6 +287,21 @@ const UploadCandidateDetails = () => {
                 </div>
               )}
 
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <div className="flex items-start space-x-2">
+                  <LuInfo className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-medium">Single Google Sheet with Multiple Sub-Sheets</p>
+                    <p className="mt-1">The system will automatically detect and combine sub-sheets:</p>
+                    <ul className="list-disc list-inside mt-1 space-y-1">
+                      <li><strong>Learning Report:</strong> DailyQuizReports, FortnightScores, CourseExamScores, OnlineDemoReports, OfflineDemoReports</li>
+                      <li><strong>Attendance Report:</strong> AttendanceReport</li>
+                      <li><strong>Grooming Report:</strong> GroomingReport</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   JSON Configuration
@@ -296,6 +318,22 @@ const UploadCandidateDetails = () => {
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Enter your spreadsheet configuration in JSON format. Google Sheet URL is automatically configured from environment settings.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Google Sheet URL (with sub-sheets)
+                </label>
+                <input
+                  type="text"
+                  value={googleSheetUrl}
+                  onChange={(e) => setGoogleSheetUrl(e.target.value)}
+                  placeholder="https://script.google.com/.../exec"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Google Apps Script URL for the sheet containing all sub-sheets (DailyQuizReports, FortnightScores, CourseExamScores, OnlineDemoReports, OfflineDemoReports, AttendanceReport, GroomingReport)
                 </p>
               </div>
 
@@ -374,7 +412,7 @@ const UploadCandidateDetails = () => {
     "learningReport": { ... },
     "attendanceReport": { ... },
     "groomingReport": { ... },
-    "interactionsReport": { ... }
+    "culturalReport": { ... }
   }
 ]'
                 />

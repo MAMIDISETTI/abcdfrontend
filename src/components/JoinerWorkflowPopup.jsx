@@ -232,6 +232,8 @@ const JoinerWorkflowPopup = ({ isOpen, onClose, joiner, joiners = [], onSuccess 
             accountCreated: true,
             accountCreatedAt: new Date().toISOString(),
             createdBy: currentUser?.author_id || null,
+            // Use the same author_id from joiner
+            author_id: trainee.author_id || null,
             
             // Password management
             tempPassword: password,
@@ -339,7 +341,8 @@ const JoinerWorkflowPopup = ({ isOpen, onClose, joiner, joiners = [], onSuccess 
           top_department_name_as_per_darwinbox: joiner.top_department_name_as_per_darwinbox || joiner.department,
           department_name_as_per_darwinbox: joiner.department_name_as_per_darwinbox || joiner.department,
           joining_status: joiner.joining_status || joiner.status,
-          // author_id will be generated automatically by the backend     
+          // Use the same author_id from joiner
+          author_id: joiner.author_id || null,
           role_type: joiner.role_type,
           role_assign: joiner.role_assign,
           qualification: joiner.qualification,
