@@ -164,21 +164,62 @@ const UploadJoinersPopup = ({ isOpen, onClose, onSuccess }) => {
     setErrors([]);
 
     try {
+      // Set a longer timeout for bulk uploads (5 minutes)
       const response = await axiosInstance.post(API_PATHS.JOINERS.BULK_UPLOAD, {
         spread_sheet_name: jsonData.spread_sheet_name,
         data_sets_to_be_loaded: jsonData.data_sets_to_be_loaded,
         google_sheet_url: googleSheetUrl || null, // Use null if not available
         joiners_data: joinersData
+      }, {
+        timeout: 300000 // 5 minutes timeout
       });
 
-      toast.success(`Successfully uploaded ${response.data.createdCount} joiners!`);
-      onSuccess?.(response.data);
-      handleClose();
+      if (response.data.createdCount !== undefined) {
+        toast.success(`Successfully uploaded ${response.data.createdCount} joiners!`);
+        onSuccess?.(response.data);
+        handleClose();
+      } else {
+        // Handle partial success or warnings
+        const message = response.data.message || 'Upload completed with warnings';
+        toast.success(message);
+        if (response.data.errors && response.data.errors.length > 0) {
+          setErrors(response.data.errors);
+        } else {
+          onSuccess?.(response.data);
+          handleClose();
+        }
+      }
     } catch (error) {
       console.error('Upload error:', error);
+      console.error('Error response:', error.response?.data);
+      
       const errorMessage = error.response?.data?.message || 'Failed to upload joiners data';
       const errorDetails = error.response?.data?.errors || [];
-      setErrors([errorMessage, ...errorDetails]);
+      const errorStack = error.response?.data?.stack;
+      
+      // Build comprehensive error list
+      const allErrors = [errorMessage];
+      if (errorDetails && Array.isArray(errorDetails) && errorDetails.length > 0) {
+        allErrors.push(...errorDetails);
+      } else if (typeof errorDetails === 'string') {
+        allErrors.push(errorDetails);
+      }
+      
+      // Add server error details if available
+      if (error.response?.data?.error) {
+        allErrors.push(`Server error: ${error.response.data.error}`);
+      }
+      
+      // Add database error details if available
+      if (error.response?.data?.errorName) {
+        allErrors.push(`Error type: ${error.response.data.errorName}`);
+      }
+      
+      if (error.response?.data?.errorCount !== undefined) {
+        allErrors.push(`Failed records: ${error.response.data.errorCount} out of ${error.response.data.totalCount || 'unknown'}`);
+      }
+      
+      setErrors(allErrors);
       toast.error(errorMessage);
     } finally {
       setLoading(false);
