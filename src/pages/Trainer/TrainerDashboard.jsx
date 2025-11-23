@@ -84,6 +84,118 @@ const TrainerDashboard = () => {
     getTrainerDashboard();
   }, []);
 
+  // Refetch data when admin updates trainee assignments
+  useEffect(() => {
+    let broadcastChannel = null;
+    
+    // Check for refresh flag on mount
+    const refreshFlag = localStorage.getItem('trainerDashboardRefresh');
+    if (refreshFlag) {
+      localStorage.removeItem('trainerDashboardRefresh');
+      getTrainerDashboard();
+    }
+
+    // Listen for custom event (for same-tab updates)
+    const handleDataUpdate = () => {
+      getTrainerDashboard();
+    };
+
+    window.addEventListener('trainerDashboardUpdated', handleDataUpdate);
+    
+    // Listen for storage events (for cross-tab updates)
+    const handleStorageChange = (e) => {
+      if (e.key === 'trainerDashboardRefresh') {
+        localStorage.removeItem('trainerDashboardRefresh');
+        getTrainerDashboard();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Use BroadcastChannel for reliable cross-tab communication
+    try {
+      broadcastChannel = new BroadcastChannel('trainerDashboardUpdates');
+      broadcastChannel.onmessage = (event) => {
+        if (event.data && event.data.type === 'refresh') {
+          // Refresh if it's a general refresh or if it's for this trainer
+          if (!event.data.trainerId || event.data.trainerId === user?.id) {
+            getTrainerDashboard();
+          }
+        }
+      };
+    } catch (e) {
+      console.warn('BroadcastChannel not supported, using fallback methods');
+    }
+    
+    // Listen for visibility change (when user switches back to this tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const refreshFlag = localStorage.getItem('trainerDashboardRefresh');
+        if (refreshFlag) {
+          localStorage.removeItem('trainerDashboardRefresh');
+          getTrainerDashboard();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Poll for updates every 2 seconds as a fallback (only when tab is visible)
+    let pollInterval = null;
+    if (document.visibilityState === 'visible') {
+      pollInterval = setInterval(() => {
+        const refreshFlag = localStorage.getItem('trainerDashboardRefresh');
+        if (refreshFlag) {
+          const flagTime = parseInt(refreshFlag);
+          const now = Date.now();
+          // Only refresh if flag is less than 5 seconds old (to avoid stale updates)
+          if (now - flagTime < 5000) {
+            localStorage.removeItem('trainerDashboardRefresh');
+            getTrainerDashboard();
+          }
+        }
+      }, 2000);
+    }
+
+    const handlePollVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        if (!pollInterval) {
+          pollInterval = setInterval(() => {
+            const refreshFlag = localStorage.getItem('trainerDashboardRefresh');
+            if (refreshFlag) {
+              const flagTime = parseInt(refreshFlag);
+              const now = Date.now();
+              if (now - flagTime < 5000) {
+                localStorage.removeItem('trainerDashboardRefresh');
+                getTrainerDashboard();
+              }
+            }
+          }, 2000);
+        }
+      } else {
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handlePollVisibilityChange);
+
+    return () => {
+      window.removeEventListener('trainerDashboardUpdated', handleDataUpdate);
+      window.removeEventListener('storage', handleStorageChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handlePollVisibilityChange);
+      if (broadcastChannel) {
+        broadcastChannel.close();
+      }
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [user?.id]);
+
   if (loading) {
     return (
       <DashboardLayout activeMenu="Dashboard">

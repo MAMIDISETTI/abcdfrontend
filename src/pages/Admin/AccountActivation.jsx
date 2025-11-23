@@ -8,6 +8,7 @@ const AccountActivation = () => {
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -51,10 +52,29 @@ const AccountActivation = () => {
   };
   const [isCreating, setIsCreating] = useState(false);
 
+  // Debounce search term to avoid reloading on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setCurrentPage(1); // Reset to first page when search changes
+    }, 500); // Wait 500ms after user stops typing
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Fetch from API when page, role, status, or debounced search term changes
+  // When searching, we fetch all users for client-side filtering
+  // When not searching, we use pagination
   useEffect(() => {
     fetchAllUsers();
-    fetchStatistics(); // Fetch statistics separately
-  }, [currentPage, searchTerm, roleFilter, statusFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, roleFilter, statusFilter, debouncedSearchTerm]);
+  
+  // Fetch statistics only once on mount
+  useEffect(() => {
+    fetchStatistics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch statistics separately (all users for accurate counts)
   const fetchStatistics = async () => {
@@ -76,16 +96,16 @@ const AccountActivation = () => {
     }
   };
 
-  // Filter users based on search term and filters (client-side for statistics)
+  // Filter users based on search term and filters (client-side)
   useEffect(() => {
     let filtered = allUsers;
 
     // Search by name or email
-    if (searchTerm) {
+    if (debouncedSearchTerm) {
       filtered = filtered.filter(user => 
-        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.author_id?.toLowerCase().includes(searchTerm.toLowerCase())
+        user.name?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        user.email?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        user.author_id?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
       );
     }
 
@@ -105,8 +125,23 @@ const AccountActivation = () => {
       }
     }
 
+    // When searching, implement client-side pagination
+    if (debouncedSearchTerm) {
+      // Calculate pagination for filtered results
+      const totalFiltered = filtered.length;
+      const totalPagesForFiltered = Math.ceil(totalFiltered / itemsPerPage);
+      setTotalPages(totalPagesForFiltered);
+      setTotalUsers(totalFiltered);
+      
+      // Apply pagination to filtered results
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const endIndex = startIndex + itemsPerPage;
+      filtered = filtered.slice(startIndex, endIndex);
+    }
+    // When not searching, totalUsers and totalPages are already set by fetchAllUsers from API response
+
     setFilteredUsers(filtered);
-  }, [allUsers, searchTerm, roleFilter, statusFilter]);
+  }, [allUsers, debouncedSearchTerm, roleFilter, statusFilter, currentPage, itemsPerPage]);
 
   const fetchAllUsers = async () => {
     try {
@@ -115,13 +150,21 @@ const AccountActivation = () => {
       // Build query parameters
       const params = new URLSearchParams();
       params.append('status', statusFilter || 'all');
-      params.append('page', currentPage.toString());
-      params.append('limit', itemsPerPage.toString());
-      if (roleFilter) params.append('role', roleFilter);
-      if (searchTerm) {
-        // For search, we'll filter client-side after fetching
-        // But we can also pass it as a query param if backend supports it
+      
+      // If there's a search term, fetch all users (or a large limit) for client-side filtering
+      // Otherwise, use pagination
+      if (debouncedSearchTerm) {
+        // Fetch a large number of users to search through (or all if possible)
+        params.append('limit', '1000'); // Fetch up to 1000 users for searching
+        params.append('page', '1'); // Start from page 1 when searching
+      } else {
+        // Normal pagination when not searching
+        params.append('page', currentPage.toString());
+        params.append('limit', itemsPerPage.toString());
       }
+      
+      if (roleFilter) params.append('role', roleFilter);
+      // Note: We're doing client-side search filtering, so we don't pass searchTerm to API
       
       const response = await axiosInstance.get(`${API_PATHS.ADMIN.USERS}?${params.toString()}`);
       const users = response.data.users || [];
@@ -130,21 +173,26 @@ const AccountActivation = () => {
       
       setAllUsers(users);
       setTotalUsers(total);
-      setTotalPages(totalPagesCount);
       
-      // Apply client-side search filter if needed
-      if (searchTerm) {
-        const filtered = users.filter(user => 
-          user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.author_id?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-        setFilteredUsers(filtered);
+      // When searching, we'll handle pagination client-side, so set totalPages based on filtered results
+      // When not searching, use server-side pagination
+      if (debouncedSearchTerm) {
+        // Will be updated by the filtering useEffect
+        setTotalPages(1); // Temporary, will be recalculated
       } else {
-        setFilteredUsers(users);
+        setTotalPages(totalPagesCount);
       }
+      
+      // Don't filter here - let the separate useEffect handle filtering
+      setFilteredUsers(users);
     } catch (error) {
       console.error('Error fetching users:', error);
+      setLoading(false);
+      // Don't redirect on search errors - only on auth errors
+      if (error.response?.status === 401) {
+        // Let the axios interceptor handle this
+      }
+      return;
     } finally {
       setLoading(false);
     }
@@ -478,8 +526,15 @@ const AccountActivation = () => {
                   placeholder="Search by name, email, or ID..."
                   value={searchTerm}
                   onChange={(e) => {
+                    e.preventDefault();
                     setSearchTerm(e.target.value);
-                    setCurrentPage(1); // Reset to first page when searching
+                    // Don't reset page here - let debounce handle it
+                  }}
+                  onKeyDown={(e) => {
+                    // Prevent form submission on Enter key
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                    }
                   }}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
@@ -533,7 +588,10 @@ const AccountActivation = () => {
             {/* Clear Filters */}
             <div className="flex items-end">
               <button
-                onClick={() => {
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   setSearchTerm('');
                   setRoleFilter('');
                   setStatusFilter('');
@@ -556,9 +614,9 @@ const AccountActivation = () => {
             </h3>
             <div className="text-sm text-gray-500">
               Showing {filteredUsers.length} of {totalUsers} users
-              {searchTerm && (
+              {debouncedSearchTerm && (
                 <span className="ml-2 text-blue-600">
-                  • Searching for "{searchTerm}"
+                  • Searching for "{debouncedSearchTerm}"
                 </span>
               )}
             </div>

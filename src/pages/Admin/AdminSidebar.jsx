@@ -8,7 +8,8 @@ import {
   LuLogOut,
   LuBrain,
   LuActivity,
-  LuUserX
+  LuUserX,
+  LuRefreshCw
 } from 'react-icons/lu';
 
 const AdminSidebar = ({ activeTab, setActiveTab, onLogout }) => {
@@ -31,29 +32,41 @@ const AdminSidebar = ({ activeTab, setActiveTab, onLogout }) => {
       icon: LuUserX,
       path: '/admin/deactivated-users'
     },
-    {
-      id: 'role-distribution',
-      label: 'Role Distribution',
-      icon: LuTrendingUp,
-      path: '/admin/role-distribution'
-    },
-    {
-      id: 'mcq-deployments',
-      label: 'MCQ Deployments',
-      icon: LuBrain,
-      path: '/admin/mcq-deployments'
-    },
-    {
-      id: 'candidate-dashboard',
-      label: 'Candidate Dashboard',
-      icon: LuActivity,
-      path: '/admin/candidate-dashboard'
-    },
+    // {
+    //   id: 'role-distribution',
+    //   label: 'Role Distribution',
+    //   icon: LuTrendingUp,
+    //   path: '/admin/role-distribution'
+    // },
+    // {
+    //   id: 'mcq-deployments',
+    //   label: 'MCQ Deployments',
+    //   icon: LuBrain,
+    //   path: '/admin/mcq-deployments'
+    // },
+    // {
+    //   id: 'candidate-dashboard',
+    //   label: 'Candidate Dashboard',
+    //   icon: LuActivity,
+    //   path: '/admin/candidate-dashboard'
+    // },
     {
       id: 'candidate-performance-dashboard',
       label: 'Candidate Performance Dashboard',
       icon: LuTrendingUp,
       path: '/admin/candidate-performance-dashboard'
+    },
+    {
+      id: 'performers-metrics-dashboard',
+      label: 'Performers Metrics Dashboard',
+      icon: LuActivity,
+      path: '/admin/performers-metrics-dashboard'
+    },
+    {
+      id: 'google-sheets-sync',
+      label: 'Google Sheets Sync',
+      icon: LuRefreshCw,
+      path: '/admin/google-sheets-sync'
     },
     {
       id: 'settings',

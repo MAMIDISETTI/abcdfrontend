@@ -17,6 +17,7 @@ export const API_PATHS = {
     CREATE_USER: "/api/users", // Create a new user
     UPDATE_USER: (userId) => `/api/users/${userId}`, // Update user details
     DELETE_USER: (userId) => `/api/users/${userId}`, // Delete a user
+    UPDATE_BY_AUTHOR: (authorId) => `/api/users/by-author/${authorId}`, // Update user by author_id
   },
 
   // Training Management Platform APIs
@@ -197,6 +198,13 @@ export const API_PATHS = {
     MCQ_DEPLOYMENTS: "/api/mcq-deployments/admin",
   },
 
+  PERFORMERS_METRICS: {
+    GET_ALL_CANDIDATES: "/api/performers-metrics/candidates",
+    GET_PERFORMERS: "/api/performers-metrics/performers",
+    GET_BY_EXAM_THRESHOLD: "/api/performers-metrics/exam-threshold",
+    GET_BY_LEARNING_PHASE: "/api/performers-metrics/learning-phase",
+  },
+
   MASTER_TRAINER: {
     MCQ_DEPLOYMENTS: "/api/mcq-deployments/master-trainer",
   },
@@ -218,5 +226,19 @@ export const API_PATHS = {
     MARK_AS_READ: (notificationId) => `/api/notifications/${notificationId}/read`,
     MARK_ALL_READ: "/api/notifications/mark-all-read",
     DELETE: (notificationId) => `/api/notifications/${notificationId}`,
+  },
+
+  // Google Sheets Sync API paths
+  SYNC: {
+    USERS: "/api/sync/users",
+    JOINERS: "/api/sync/joiners",
+    CANDIDATE_REPORTS: "/api/sync/candidate-reports",
+    ALL: "/api/sync/all",
+  },
+
+  // Candidate Reports API paths
+  CANDIDATE_REPORTS: {
+    GET_PERFORMANCE: (authorId) => `/api/candidate-reports/performance/${authorId}`,
+    UPDATE_REPORT: (authorId, reportType) => `/api/candidate-reports/${authorId}/${reportType}`,
   },
 };

@@ -219,6 +219,8 @@ const UploadCandidateDetails = () => {
         data_sets_to_be_loaded: jsonData.data_sets_to_be_loaded,
         google_sheet_url: googleSheetUrl.trim() || null,
         candidate_reports_data: validReports
+      }, {
+        timeout: 300000 // 5 minutes timeout for bulk uploads
       });
 
       toast.dismiss('uploading');
@@ -287,7 +289,7 @@ const UploadCandidateDetails = () => {
                 </div>
               )}
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+              {/* <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
                 <div className="flex items-start space-x-2">
                   <LuInfo className="w-5 h-5 text-blue-600 mt-0.5" />
                   <div className="text-sm text-blue-800">
@@ -300,7 +302,7 @@ const UploadCandidateDetails = () => {
                     </ul>
                   </div>
                 </div>
-              </div>
+              </div> */}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -321,7 +323,7 @@ const UploadCandidateDetails = () => {
                 </p>
               </div>
 
-              <div>
+              {/* <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Google Sheet URL (with sub-sheets)
                 </label>
@@ -335,7 +337,7 @@ const UploadCandidateDetails = () => {
                 <p className="text-xs text-gray-500 mt-1">
                   Google Apps Script URL for the sheet containing all sub-sheets (DailyQuizReports, FortnightScores, CourseExamScores, OnlineDemoReports, OfflineDemoReports, AttendanceReport, GroomingReport)
                 </p>
-              </div>
+              </div> */}
 
               {bulkErrors.length > 0 && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">

@@ -11,6 +11,8 @@ import RoleDistribution from './RoleDistribution';
 import MCQDeployments from './MCQDeployments';
 import CandidateDashboard from './CandidateDashboardSimple';
 import CandidatePerformanceDashboard from './CandidatePerformanceDashboard';
+import PerformersMetricsDashboard from './PerformersMetricsDashboard';
+import GoogleSheetsSync from './GoogleSheetsSync';
 
 const AdminLayout = () => {
   const location = useLocation();
@@ -26,6 +28,8 @@ const AdminLayout = () => {
     '/admin/mcq-deployments': 'mcq-deployments',
     '/admin/candidate-dashboard': 'candidate-dashboard',
     '/admin/candidate-performance-dashboard': 'candidate-performance-dashboard',
+    '/admin/performers-metrics-dashboard': 'performers-metrics-dashboard',
+    '/admin/google-sheets-sync': 'google-sheets-sync',
     '/admin/settings': 'settings'
   };
   
@@ -69,6 +73,10 @@ const AdminLayout = () => {
         return <CandidateDashboard />;
       case 'candidate-performance-dashboard':
         return <CandidatePerformanceDashboard />;
+      case 'performers-metrics-dashboard':
+        return <PerformersMetricsDashboard />;
+      case 'google-sheets-sync':
+        return <GoogleSheetsSync />;
       case 'settings':
         return (
           <div className="p-6">
@@ -103,6 +111,8 @@ const AdminLayout = () => {
             'mcq-deployments': '/admin/mcq-deployments',
             'candidate-dashboard': '/admin/candidate-dashboard',
             'candidate-performance-dashboard': '/admin/candidate-performance-dashboard',
+            'performers-metrics-dashboard': '/admin/performers-metrics-dashboard',
+            'google-sheets-sync': '/admin/google-sheets-sync',
             'settings': '/admin/settings'
           };
           const path = tabToPathMap[tabId] || '/admin/dashboard';

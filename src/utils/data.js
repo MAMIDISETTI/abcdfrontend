@@ -288,12 +288,12 @@ import {
       icon: LuLayoutDashboard,
       path: "/boa/dashboard",
     },
-    {
-      id: "boa02",
-      label: "Assign Trainees",
-      icon: LuUsers,
-      path: "/boa/assign-trainees",
-    },
+    // {
+    //   id: "boa02",
+    //   label: "Assign Trainees",
+    //   icon: LuUsers,
+    //   path: "/boa/assign-trainees",
+    // },
     {
       id: "boa07",
       label: "Upload Candidate Details",
@@ -306,30 +306,30 @@ import {
       icon: LuFileSpreadsheet,
       path: "/boa/upload-results",
     },
-    {
-      id: "boa06",
-      label: "Results",
-      icon: LuFileText,
-      path: "/boa/results",
-    },
+    // {
+    //   id: "boa06",
+    //   label: "Results",
+    //   icon: LuFileText,
+    //   path: "/boa/results",
+    // },
     {
       id: "boa04",
       label: "Reports & Stats",
       icon: LuTrendingUp,
       path: "/boa/reports-stats",
     },
-    {
-      id: "boa05",
-      label: "Settings",
-      icon: LuSettings,
-      path: "/boa/settings",
-    },
-    {
-      id: "boa06",
-      label: "Notifications",
-      icon: LuBell,
-      path: "/boa/notifications",
-    },
+    // {
+    //   id: "boa05",
+    //   label: "Settings",
+    //   icon: LuSettings,
+    //   path: "/boa/settings",
+    // },
+    // {
+    //   id: "boa06",
+    //   label: "Notifications",
+    //   icon: LuBell,
+    //   path: "/boa/notifications",
+    // },
     {
       id: "boa99",
       label: "Logout",

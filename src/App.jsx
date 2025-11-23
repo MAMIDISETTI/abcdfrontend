@@ -60,6 +60,7 @@ import ProfileSettings from "./pages/Trainee/ProfileSettings";
 
 // Common pages
 import Unauthorized from "./pages/Common/Unauthorized";
+import UserDetails from "./pages/Admin/UserDetails";
 
 import PrivateRoute from "./routes/PrivateRoute";
 import UserProvider, { UserContext } from "./context/userContext";
@@ -138,6 +139,11 @@ const App = () => {
               <Route path="/admin/tasks" element={<ManageTasks />} />
               <Route path="/admin/create-task" element={<CreateTask />} />
               <Route path="/admin/legacy-users" element={<ManageUsers />} />
+            </Route>
+
+            {/* User Details - Accessible to all authenticated users */}
+            <Route element={<PrivateRoute allowedRoles={["admin", "master_trainer", "trainer", "boa", "trainee"]} />}>
+              <Route path="/user-details" element={<UserDetails />} />
             </Route>
 
             {/* Legacy User Routes (keeping for backward compatibility) */}

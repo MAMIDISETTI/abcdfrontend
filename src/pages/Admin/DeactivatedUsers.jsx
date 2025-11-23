@@ -7,6 +7,7 @@ const DeactivatedUsers = () => {
   const [deactivatedUsers, setDeactivatedUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [severityFilter, setSeverityFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -16,9 +17,22 @@ const DeactivatedUsers = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
+  // Debounce search term to avoid reloading on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setCurrentPage(1); // Reset to first page when search changes
+    }, 500); // Wait 500ms after user stops typing
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Fetch users when filters change
+  // Note: debouncedSearchTerm is already debounced (500ms delay), so this won't fire on every keystroke
   useEffect(() => {
     fetchDeactivatedUsers();
-  }, [currentPage, searchTerm, categoryFilter, severityFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, debouncedSearchTerm, categoryFilter, severityFilter]);
 
   const fetchDeactivatedUsers = async () => {
     try {
@@ -26,7 +40,7 @@ const DeactivatedUsers = () => {
       const params = new URLSearchParams({
         page: currentPage,
         limit: 10,
-        ...(searchTerm && { search: searchTerm }),
+        ...(debouncedSearchTerm && { search: debouncedSearchTerm }),
         ...(categoryFilter && { category: categoryFilter }),
         ...(severityFilter && { severity: severityFilter })
       });
@@ -96,14 +110,6 @@ const DeactivatedUsers = () => {
     return colors[severity] || colors.low;
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="p-6">
       <div className="mb-8">
@@ -164,7 +170,16 @@ const DeactivatedUsers = () => {
                 type="text"
                 placeholder="Search by name, email, or ID..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  e.preventDefault();
+                  setSearchTerm(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  // Prevent form submission on Enter key
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                  }
+                }}
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -210,7 +225,10 @@ const DeactivatedUsers = () => {
             {/* Clear Filters */}
             <div className="flex items-end">
               <button
-                onClick={() => {
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   setSearchTerm('');
                   setCategoryFilter('');
                   setSeverityFilter('');
@@ -231,13 +249,21 @@ const DeactivatedUsers = () => {
             <h3 className="text-lg font-semibold text-gray-900">
               Deactivated Users ({total})
             </h3>
-            <div className="text-sm text-gray-500">
-              Page {currentPage} of {totalPages}
+            <div className="text-sm text-gray-500 flex items-center gap-2">
+              {loading && (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              )}
+              <span>Page {currentPage} of {totalPages}</span>
             </div>
           </div>
         </div>
         
-        {deactivatedUsers.length === 0 ? (
+        {loading && deactivatedUsers.length === 0 ? (
+          <div className="p-8 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-500">Loading deactivated users...</p>
+          </div>
+        ) : deactivatedUsers.length === 0 ? (
           <div className="p-8 text-center">
             <LuUserX className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">

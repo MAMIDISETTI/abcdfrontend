@@ -281,6 +281,22 @@ const AssignTrainees = () => {
       
       // Refresh data
       loadAllData();
+      
+      // Signal to trainer dashboards that assignments have been updated
+      const timestamp = Date.now().toString();
+      localStorage.setItem('trainerDashboardRefresh', timestamp);
+      // Dispatch custom event for same-tab refresh
+      window.dispatchEvent(new Event('trainerDashboardUpdated'));
+      // Use BroadcastChannel for cross-tab communication
+      try {
+        const channel = new BroadcastChannel('trainerDashboardUpdates');
+        channel.postMessage({ type: 'refresh', timestamp, trainerId: selectedTrainer });
+        channel.close();
+      } catch (e) {
+        // BroadcastChannel not supported, fallback to storage event
+        localStorage.removeItem('trainerDashboardRefresh');
+        localStorage.setItem('trainerDashboardRefresh', timestamp);
+      }
     } catch (error) {
       console.error("Error creating assignment:", error);
       const errorMessage = error.response?.data?.message || "Failed to create assignment";

@@ -88,16 +88,10 @@ const SignUp = () => {
       setProfilePic(null);
       setError(null);
     } catch (error){
-      console.error('=== SIGNUP ERROR ===');
-      console.error('Error object:', error);
-      console.error('Error response:', error.response);
-      console.error('Error message:', error.message);
       
       if (error.response && error.response.data) {
-        console.error('Error data:', error.response.data);
         setError(error.response.data.message || 'Registration failed');
       } else {
-        console.error('No response data available');
         setError("Something went wrong. Please try again.");
       }
     } finally {
