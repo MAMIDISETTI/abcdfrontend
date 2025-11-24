@@ -546,9 +546,9 @@ const PerformersMetricsDashboard = () => {
                           <div className="text-xs text-slate-500">
                             {performersFiltered && performersThreshold
                               ? (performersExamType === 'overall' ? 'Overall Score' 
-                                  : performersExamType === 'dailyQuiz' ? 'Daily Quiz %'
-                                  : performersExamType === 'fortnightExam' ? 'Fortnight %'
-                                  : 'Course Exam %')
+                                  : performersExamType === 'dailyQuiz' ? 'Daily Quiz'
+                                  : performersExamType === 'fortnightExam' ? 'Fortnight'
+                                  : 'Course Exam')
                               : 'Score'}
                           </div>
                         </div>
@@ -561,15 +561,15 @@ const PerformersMetricsDashboard = () => {
                         <div className="grid grid-cols-3 gap-2 text-xs">
                           <div>
                             <span className="text-slate-500">Daily Quiz:</span>
-                            <span className="ml-1 font-semibold text-slate-900">{candidate.examAverages?.dailyQuiz?.toFixed(1) || 'N/A'}%</span>
+                            <span className="ml-1 font-semibold text-slate-900">{candidate.examAverages?.dailyQuiz?.toFixed(1) || 'N/A'}</span>
                           </div>
                           <div>
                             <span className="text-slate-500">Fortnight:</span>
-                            <span className="ml-1 font-semibold text-slate-900">{candidate.examAverages?.fortnightExam?.toFixed(1) || 'N/A'}%</span>
+                            <span className="ml-1 font-semibold text-slate-900">{candidate.examAverages?.fortnightExam?.toFixed(1) || 'N/A'}</span>
                           </div>
                           <div>
                             <span className="text-slate-500">Course:</span>
-                            <span className="ml-1 font-semibold text-slate-900">{candidate.examAverages?.courseExam?.toFixed(1) || 'N/A'}%</span>
+                            <span className="ml-1 font-semibold text-slate-900">{candidate.examAverages?.courseExam?.toFixed(1) || 'N/A'}</span>
                           </div>
                         </div>
                       </div>
@@ -636,9 +636,9 @@ const PerformersMetricsDashboard = () => {
                           <div className="text-xs text-slate-500">
                             {performersFiltered && performersThreshold
                               ? (performersExamType === 'overall' ? 'Overall Score' 
-                                  : performersExamType === 'dailyQuiz' ? 'Daily Quiz %'
-                                  : performersExamType === 'fortnightExam' ? 'Fortnight %'
-                                  : 'Course Exam %')
+                                  : performersExamType === 'dailyQuiz' ? 'Daily Quiz'
+                                  : performersExamType === 'fortnightExam' ? 'Fortnight'
+                                  : 'Course Exam')
                               : 'Score'}
                           </div>
                         </div>
@@ -651,15 +651,15 @@ const PerformersMetricsDashboard = () => {
                         <div className="grid grid-cols-3 gap-2 text-xs">
                           <div>
                             <span className="text-slate-500">Daily Quiz:</span>
-                            <span className="ml-1 font-semibold text-slate-900">{candidate.examAverages?.dailyQuiz?.toFixed(1) || 'N/A'}%</span>
+                            <span className="ml-1 font-semibold text-slate-900">{candidate.examAverages?.dailyQuiz?.toFixed(1) || 'N/A'}</span>
                           </div>
                           <div>
                             <span className="text-slate-500">Fortnight:</span>
-                            <span className="ml-1 font-semibold text-slate-900">{candidate.examAverages?.fortnightExam?.toFixed(1) || 'N/A'}%</span>
+                            <span className="ml-1 font-semibold text-slate-900">{candidate.examAverages?.fortnightExam?.toFixed(1) || 'N/A'}</span>
                           </div>
                           <div>
                             <span className="text-slate-500">Course:</span>
-                            <span className="ml-1 font-semibold text-slate-900">{candidate.examAverages?.courseExam?.toFixed(1) || 'N/A'}%</span>
+                            <span className="ml-1 font-semibold text-slate-900">{candidate.examAverages?.courseExam?.toFixed(1) || 'N/A'}</span>
                           </div>
                         </div>
                       </div>
@@ -698,7 +698,7 @@ const PerformersMetricsDashboard = () => {
                     <div className="flex-1">
                       <h3 className="text-lg font-bold text-slate-900 mb-1">{candidate.name || 'N/A'}</h3>
                       <p className="text-sm text-slate-500 mb-1">{candidate.email || 'N/A'}</p>
-                      <p className="text-xs text-slate-400">{candidate.employeeId || candidate.author_id}</p>
+                      <p className="text-xs text-slate-400 bg-blue-50 px-2 py-1 rounded inline-block">{candidate.author_id || candidate.employeeId || 'N/A'}</p>
                     </div>
                     <div className="text-right">
                       <div className="text-3xl font-bold text-teal-700 mb-1">{candidate.overallScore || 0}</div>
@@ -714,36 +714,36 @@ const PerformersMetricsDashboard = () => {
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs text-slate-600">Daily Quiz</span>
-                        <span className="text-sm font-semibold text-slate-900">{candidate.examAverages?.dailyQuiz?.toFixed(1) || 'N/A'}%</span>
+                        <span className="text-sm font-semibold text-slate-900">{candidate.examAverages?.dailyQuiz?.toFixed(1) || 'N/A'}</span>
                       </div>
                       <div className="w-full bg-slate-200 rounded-full h-2">
                         <div
                           className="bg-slate-600 h-2 rounded-full"
-                          style={{ width: `${Math.min(candidate.examAverages?.dailyQuiz || 0, 100)}%` }}
+                          style={{ width: `${Math.min(candidate.examAverages?.dailyQuiz || 0, 100)}` }}
                         ></div>
                       </div>
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs text-slate-600">Fortnight Exam</span>
-                        <span className="text-sm font-semibold text-slate-900">{candidate.examAverages?.fortnightExam?.toFixed(1) || 'N/A'}%</span>
+                        <span className="text-sm font-semibold text-slate-900">{candidate.examAverages?.fortnightExam?.toFixed(1) || 'N/A'}</span>
                       </div>
                       <div className="w-full bg-slate-200 rounded-full h-2">
                         <div
                           className="bg-teal-600 h-2 rounded-full"
-                          style={{ width: `${Math.min(candidate.examAverages?.fortnightExam || 0, 100)}%` }}
+                          style={{ width: `${Math.min(candidate.examAverages?.fortnightExam || 0, 100)}` }}
                         ></div>
                       </div>
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs text-slate-600">Course Exam</span>
-                        <span className="text-sm font-semibold text-slate-900">{candidate.examAverages?.courseExam?.toFixed(1) || 'N/A'}%</span>
+                        <span className="text-sm font-semibold text-slate-900">{candidate.examAverages?.courseExam?.toFixed(1) || 'N/A'}</span>
                       </div>
                       <div className="w-full bg-slate-200 rounded-full h-2">
                         <div
                           className="bg-slate-800 h-2 rounded-full"
-                          style={{ width: `${Math.min(candidate.examAverages?.courseExam || 0, 100)}%` }}
+                          style={{ width: `${Math.min(candidate.examAverages?.courseExam || 0, 100)}` }}
                         ></div>
                       </div>
                     </div>

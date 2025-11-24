@@ -780,7 +780,7 @@ const UserDetails = () => {
     ]) || {};
     
     const courseExamScores = findValueByVariations(reportData, [
-      'Course Exam score in %', 'Course Exam scores', 'Course Exam Scores',
+      'Course Exam score in', 'Course Exam scores', 'Course Exam Scores',
       'Course Exam score', 'courseExamScores', 'courseExamScore',
       'course exam score', 'course exam scores'
     ]) || {};
@@ -859,7 +859,7 @@ const UserDetails = () => {
                               topicData['attempts'] ||
                               topicData['Daily Quiz attempt count'];
           const scoreValue = topicData['Daily Quiz score Average'] ||
-                           topicData['Daily Quiz score Average in %'] ||
+                           topicData['Daily Quiz score Average in'] ||
                            topicData['Daily Quiz Average'] ||
                            topicData['daily quiz score average'] ||
                            topicData['Daily Quiz Average Score'] ||
@@ -911,7 +911,7 @@ const UserDetails = () => {
           const scoreValue = topicData['Fort night exam score Average (In Percentage)'] ||
                            topicData['Fort night exam score Average(In Percentage)'] ||
                            topicData['Fort night exam score Average'] ||
-                           topicData['Fort Night Exam score Average in %'] ||
+                           topicData['Fort Night Exam score Average in'] ||
                            topicData['Fort Night Exam Average'] ||
                            topicData['fort night exam score average'] ||
                            topicData['Fortnight Exam Score Average'] ||
@@ -950,13 +950,13 @@ const UserDetails = () => {
                               topicData['Course Exam attempt'];
           const scoreValue = topicData['Course exam score'] ||
                            topicData['Course Exam score'] ||
-                           topicData['Course Exam score in %'] ||
+                           topicData['Course Exam score in'] ||
                            topicData['Course Exam Scores'] ||
                            topicData['Course Exam Score'] ||
                            topicData['course exam score'] ||
                            topicData['Score'] ||
                            topicData['score'] ||
-                           topicData['Course Exam Score (%)'];
+                           topicData['Course Exam Score'];
           
           if (attemptValue !== undefined && attemptValue !== null && attemptValue !== '') {
             if (!courseExamAttempts[topic] || courseExamAttempts[topic] === 0) {
@@ -1347,7 +1347,7 @@ const UserDetails = () => {
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Avg Score</p>
                     <p className={`text-xs font-semibold ${getScoreColor(selectedCourseData.dailyQuiz.score)}`}>
-                      {formatScore(selectedCourseData.dailyQuiz.score) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.dailyQuiz.score))}%`}
+                      {formatScore(selectedCourseData.dailyQuiz.score) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.dailyQuiz.score))}`}
                     </p>
                   </div>
                 </div>
@@ -1376,7 +1376,7 @@ const UserDetails = () => {
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Avg Score</p>
                     <p className={`text-xs font-semibold ${getScoreColor(selectedCourseData.fortNight.score)}`}>
-                      {formatScore(selectedCourseData.fortNight.score) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.fortNight.score))}%`}
+                      {formatScore(selectedCourseData.fortNight.score) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.fortNight.score))}`}
                     </p>
                   </div>
                 </div>
@@ -1393,7 +1393,7 @@ const UserDetails = () => {
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Score</p>
                     <p className={`text-xs font-semibold ${getScoreColor(selectedCourseData.course.score, 'course')}`}>
-                      {formatScore(selectedCourseData.course.score) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.course.score))}%`}
+                      {formatScore(selectedCourseData.course.score) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.course.score))}`}
                     </p>
                   </div>
                 </div>
@@ -1410,7 +1410,7 @@ const UserDetails = () => {
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Rating Avg</p>
                     <p className={`text-xs font-semibold ${getScoreColor(selectedCourseData.onlineDemo.rating)}`}>
-                      {formatScore(selectedCourseData.onlineDemo.rating) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.onlineDemo.rating))}%`}
+                      {formatScore(selectedCourseData.onlineDemo.rating) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.onlineDemo.rating))}`}
                     </p>
                   </div>
                 </div>
@@ -1427,7 +1427,7 @@ const UserDetails = () => {
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Rating Avg</p>
                     <p className={`text-xs font-semibold ${getScoreColor(selectedCourseData.offlineDemo.rating)}`}>
-                      {formatScore(selectedCourseData.offlineDemo.rating) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.offlineDemo.rating))}%`}
+                      {formatScore(selectedCourseData.offlineDemo.rating) === 'N/A' ? 'N/A' : `${Math.round(formatScore(selectedCourseData.offlineDemo.rating))}`}
                     </p>
                   </div>
                 </div>

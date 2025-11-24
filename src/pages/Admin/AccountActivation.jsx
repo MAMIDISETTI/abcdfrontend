@@ -4,7 +4,8 @@ import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 
 const AccountActivation = () => {
-  const [allUsers, setAllUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]); // All users fetched from API
+  const [allUsersCache, setAllUsersCache] = useState([]); // Cache of all users for client-side search
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,20 +56,38 @@ const AccountActivation = () => {
   // Debounce search term to avoid reloading on every keystroke
   useEffect(() => {
     const timer = setTimeout(() => {
+      const isSearching = searchTerm.trim().length > 0;
+      const wasSearching = debouncedSearchTerm.trim().length > 0;
+      
       setDebouncedSearchTerm(searchTerm);
-      setCurrentPage(1); // Reset to first page when search changes
+      
+      // Reset page when starting a new search or clearing search
+      // This won't trigger a fetch because fetchAllUsers checks debouncedSearchTerm
+      if ((isSearching && !wasSearching) || (!isSearching && wasSearching)) {
+        setCurrentPage(1);
+      }
     }, 500); // Wait 500ms after user stops typing
 
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchTerm, debouncedSearchTerm]);
 
-  // Fetch from API when page, role, status, or debounced search term changes
-  // When searching, we fetch all users for client-side filtering
-  // When not searching, we use pagination
+  // Fetch from API ONLY when page, role, or status changes - NOT when search changes
+  // Search is purely client-side using cached data
   useEffect(() => {
+    // Skip fetching if user is currently typing/searching - search uses cached data only
+    // Check searchTerm (not debouncedSearchTerm) to catch typing immediately
+    if (searchTerm.trim()) {
+      return; // Don't fetch when searching, use cached data instead
+    }
     fetchAllUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, roleFilter, statusFilter, debouncedSearchTerm]);
+  }, [currentPage, roleFilter, statusFilter, searchTerm]);
+  
+  // Fetch all users once on mount and when filters change to build cache for client-side search
+  useEffect(() => {
+    fetchAllUsersForSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleFilter, statusFilter]);
   
   // Fetch statistics only once on mount
   useEffect(() => {
@@ -96,9 +115,27 @@ const AccountActivation = () => {
     }
   };
 
+  // Fetch all users for client-side search (cached, not paginated)
+  const fetchAllUsersForSearch = async () => {
+    try {
+      const params = new URLSearchParams();
+      params.append('status', statusFilter || 'all');
+      params.append('limit', '1000'); // Fetch up to 1000 users for searching
+      params.append('page', '1');
+      if (roleFilter) params.append('role', roleFilter);
+      
+      const response = await axiosInstance.get(`${API_PATHS.ADMIN.USERS}?${params.toString()}`);
+      const users = response.data.users || [];
+      setAllUsersCache(users);
+    } catch (error) {
+      console.error('Error fetching users for search:', error);
+    }
+  };
+
   // Filter users based on search term and filters (client-side)
   useEffect(() => {
-    let filtered = allUsers;
+    // Use cached users for search, or current page users if no search
+    let filtered = debouncedSearchTerm ? allUsersCache : allUsers;
 
     // Search by name or email
     if (debouncedSearchTerm) {
@@ -125,7 +162,7 @@ const AccountActivation = () => {
       }
     }
 
-    // When searching, implement client-side pagination
+    // When searching, implement client-side pagination on cached data
     if (debouncedSearchTerm) {
       // Calculate pagination for filtered results
       const totalFiltered = filtered.length;
@@ -137,11 +174,13 @@ const AccountActivation = () => {
       const startIndex = (currentPage - 1) * itemsPerPage;
       const endIndex = startIndex + itemsPerPage;
       filtered = filtered.slice(startIndex, endIndex);
+    } else {
+      // When not searching, use server-side pagination data
+      // totalUsers and totalPages are already set by fetchAllUsers from API response
     }
-    // When not searching, totalUsers and totalPages are already set by fetchAllUsers from API response
 
     setFilteredUsers(filtered);
-  }, [allUsers, debouncedSearchTerm, roleFilter, statusFilter, currentPage, itemsPerPage]);
+  }, [allUsers, allUsersCache, debouncedSearchTerm, roleFilter, statusFilter, currentPage, itemsPerPage]);
 
   const fetchAllUsers = async () => {
     try {
@@ -151,17 +190,9 @@ const AccountActivation = () => {
       const params = new URLSearchParams();
       params.append('status', statusFilter || 'all');
       
-      // If there's a search term, fetch all users (or a large limit) for client-side filtering
-      // Otherwise, use pagination
-      if (debouncedSearchTerm) {
-        // Fetch a large number of users to search through (or all if possible)
-        params.append('limit', '1000'); // Fetch up to 1000 users for searching
-        params.append('page', '1'); // Start from page 1 when searching
-      } else {
-        // Normal pagination when not searching
-        params.append('page', currentPage.toString());
-        params.append('limit', itemsPerPage.toString());
-      }
+      // Always use normal pagination - search is handled client-side with cached data
+      params.append('page', currentPage.toString());
+      params.append('limit', itemsPerPage.toString());
       
       if (roleFilter) params.append('role', roleFilter);
       // Note: We're doing client-side search filtering, so we don't pass searchTerm to API
